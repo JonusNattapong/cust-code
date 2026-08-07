@@ -13,6 +13,7 @@ members = [
     "crates/cust-tools-api",
     "crates/cust-tools",
     "crates/cust-core",
+    "crates/cust-memory",
     "crates/cust-code",
 ]
 
