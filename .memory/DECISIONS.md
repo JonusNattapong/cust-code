@@ -5,6 +5,59 @@ decision is reversed, keep the entry and add the reversal — the reasoning is t
 
 ---
 
+## D-010 · Subagents stay outside code mode until Phase 9, but the bridge is built for them
+
+**Decision.** At Phase 4 the guest can only call tools. `spawn_child` arrives at Phase 9,
+behind a depth limit. The host bridge is typed and engine-agnostic from the start, with a
+**separate reply path** for host requests, so the transport does not change when it lands.
+
+**Why.** MiMo excludes control-flow tools from `exec` because spawning changes scheduling
+state and should not hide inside a script call — correct while the foundation is thin.
+prime-agent's `rlm()` is genuinely more expressive and worth having eventually. Building the
+bridge for it now costs almost nothing; retrofitting a reply channel later costs a rewrite.
+prime-agent documents the specific trap: a guest awaiting admission cannot be answered on
+the channel it is blocking, which is why their host replies arrive on the Jupyter *control*
+channel rather than shell.
+
+**Reversibility.** Easy to bring forward, hard to add the reply path late.
+
+## D-009 · Ship both direct tools and code mode
+
+**Decision.** A small direct set — `bash`, `read`, `edit`, `exec`, `view_image` — alongside
+code mode for everything composable. Which surface a tool appears on is a property of the
+tool (`Tool::availability()`), not a list maintained elsewhere.
+
+**Why.** codex and MiMo both ship both, and the reason is obvious in use: the model should
+not have to write a script to read one file. MiMo's GPT profile is exactly four tools and
+hides `read`/`write`/`grep`/`glob` because `exec` subsumes them. MiMo also documents its own
+unfinished edge — prompt routing and tool profiles driven by two separate sets of model-ID
+string rules, "not yet unified into a model-capability negotiation layer" — so we do the
+negotiation once and let both consult it.
+
+**Reversibility.** Easy; it is a per-tool flag.
+
+## D-008 · `cust` is a new design, not a clew rewrite
+
+**Decision.** Design from scratch, taking the best answer from each surveyed project rather
+than inheriting any one codebase. Owner's instruction, 2026-08-08: "ออกแบบใหม่ โดยหาจุดดี
+จากทุก .ref มาทำ และ clew".
+
+**Why.** The survey found different projects have the best answer to different problems —
+prime-agent for daemon and compaction, grok for sandboxing, vibe for layering and tool
+contracts, codex and MiMo for code mode, openclaw for provider generations. Inheriting one
+structure would mean inheriting its weakest parts too.
+
+**Consequences.**
+
+- No requirement to read clew's session format. An importer is optional, later.
+- Credentials remain the one deliberate reuse (D-007) — re-authenticating every provider is
+  friction with no design benefit.
+- clew's *lessons* carry (tool-result shape, live context windows, the process-global
+  provider trap); clew's *structure* does not.
+
+**Reversibility.** This is the framing decision; reversing it means starting over. The
+synthesis it produced is in `ARCHITECTURE.md`.
+
 ## D-007 · Reuse clew's credentials, read-only
 
 **Decision.** Read API keys from `~/.clew/.credentials.json`, `~/.clew/provider.json`, and

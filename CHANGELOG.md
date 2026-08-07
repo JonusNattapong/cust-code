@@ -16,6 +16,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this pr
   subsystem: code mode, daemon/sessions, compaction, sandboxing, tools/events, subagents,
   skills/extensions, boundaries, providers, protocols.
 - `DESIGN-NOTES.md` — condensed version of the above.
+- `ARCHITECTURE.md` — the synthesized design: core contracts (`Tool`, event stream, session,
+  permission), crate map with dependency rules, and a table of what each subsystem takes from
+  which surveyed project. `cust` is a new design rather than a clew rewrite.
 - `PLAN.md` — phased build order with a smoke test per phase.
 - `.doplan/` — the working task list, one file per phase.
 - `.learning/` — lessons and errors from building this project.

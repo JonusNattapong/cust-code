@@ -26,20 +26,23 @@ Index:
 | `.learning/` | Lessons and errors from building *this* project |
 | `.memory/` | This — durable facts, decisions, preferences |
 | `.doplan/` | The working task list for the current phase |
+| `ARCHITECTURE.md` | The synthesized design — what we are building, and what we took from whom |
 | `PLAN.md` | Phase order and the per-phase smoke test |
 | `DESIGN-NOTES.md` | Condensed form of `.knowledge/` |
 
 Source material for `.knowledge/` is `D:\Projects\Github\clew-code\.reference\` — eight
 agent repos, untracked, not part of this repo.
 
-## Open questions that block work
+## The framing decision
 
-1. **Is `cust` a rewrite of clew, a companion, or unrelated?** Unanswered. It decides whether
-   session formats need to interoperate, and whether clew features should be ported or
-   redesigned.
-2. Code mode only, or a small direct tool set alongside it? (codex and MiMo ship both.)
-3. Can subagents be spawned from inside code mode? Decides whether a typed host-request
-   bridge is needed at Phase 4 rather than Phase 9.
+**`cust` is a new design, not a clew rewrite** (owner, 2026-08-08). Take the best answer
+from each surveyed project; inherit no codebase. clew's *lessons* carry over, clew's
+*structure* does not. The synthesis — including which subsystem comes from which project —
+is `ARCHITECTURE.md`.
+
+Nothing is blocking. Two things to settle when we reach them: `~/.cust/` vs
+`~/.config/cust/` (Phase 1), and whether to ship a clew session importer at all (after
+Phase 5).
 
 ## Current state
 

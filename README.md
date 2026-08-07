@@ -9,6 +9,7 @@ talk to a model yet.
 
 | Doc | What it is |
 |---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | The design — core contracts, crate map, and what was taken from whom |
 | [PLAN.md](PLAN.md) | Phased build order, with a smoke test per phase |
 | [DESIGN-NOTES.md](DESIGN-NOTES.md) | Condensed survey of nine coding agents — the design rests on this |
 | [.knowledge/](.knowledge/00-index.md) | The survey in long form, split by subsystem |

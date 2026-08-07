@@ -1,7 +1,7 @@
 # PLAN
 
-Build order for `cust-code`. Grounded in [DESIGN-NOTES.md](DESIGN-NOTES.md) — read that
-first; this file says *when*, that file says *why*.
+Build order for `cust-code`. [ARCHITECTURE.md](ARCHITECTURE.md) says *what we are building*,
+[DESIGN-NOTES.md](DESIGN-NOTES.md) says *why those choices*, this file says *in what order*.
 
 ## Working agreement
 
@@ -17,20 +17,25 @@ first; this file says *when*, that file says *why*.
 
 | Question | Decision |
 |---|---|
+| Relationship to clew | **A new design.** Informed by all nine surveyed agents, inheriting no codebase. clew's lessons carry over; its structure does not. |
 | Language | Rust, edition 2024 |
 | Package / binary | crate `cust-code`, binary `cust` |
 | Code-mode engine | QuickJS via `rquickjs` (start); `deno_core` only if it proves limiting |
+| Tool surface | **Both** — a small direct set (`bash`, `read`, `edit`, `exec`, `view_image`) plus code mode for everything composable. Chosen per tool via `Tool::availability()`. |
+| Subagents in code mode | Not at Phase 4; by design at Phase 9. The host bridge is typed and engine-agnostic from the start so the transport does not change. |
 | Editor protocol | ACP — adopt, don't invent |
 | Credentials | Reuse clew's — `~/.clew/.credentials.json`, `~/.clew/provider.json`, project `.env`. Read-only; `cust` never writes to clew's files. |
-| Tool result | `{ ok, summary, data? }` (clew's shape) |
+| Tool result | `{ ok, summary, data? }` |
+
+Reasoning for each is in [.memory/DECISIONS.md](.memory/DECISIONS.md); the synthesis is in
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Still open
 
-1. Code-mode only, or a small direct tool set alongside `exec`? (codex and MiMo ship both.)
-2. Can subagents be spawned from inside code-mode? Decides whether a typed host-request
-   bridge is needed on day one.
-3. Is `cust` a rewrite of clew, a companion, or unrelated? Affects whether session formats
-   need to interoperate.
+Nothing blocking. Two things to settle when we reach them:
+
+1. `~/.cust/` or `~/.config/cust/` for our own state (Phase 1).
+2. Whether to ship a clew session importer at all (revisit after Phase 5).
 
 ---
 
@@ -91,7 +96,11 @@ The headline feature. See DESIGN-NOTES for why four independent teams landed her
 - `cust-codemode`: QuickJS guest with **no** filesystem, network, timers, or module loading.
 - Host bridge exposing `tools.<name>()` from a **late-bound registry** — the same filtered
   tool instances the outer layer got, so a hidden tool cannot reappear inside a script.
-- Control-flow tools excluded from the guest.
+- Control-flow tools excluded from the guest, via `Tool::availability()` — a property of each
+  tool, not a blocklist maintained somewhere else.
+- **Typed, engine-agnostic host bridge with a separate reply path** for host requests, so
+  Phase 9 can add `spawn_child` without changing the transport, and so a guest awaiting a
+  request is never blocked on the channel it is waiting on (prime-agent's deadlock).
 - Resource limits, MiMo's numbers as the starting point: 50 nested calls, 8 concurrent,
   60s active compute, 64 MiB guest memory, bounded code/return/log sizes.
 - Yield protocol: `exec` returns a cell id when still running; `wait(cell_id, …)` pulls new
