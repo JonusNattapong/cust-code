@@ -1,19 +1,24 @@
-[package]
-name = "cust-code"
+[workspace]
+resolver = "2"
+members = [
+    "crates/cust-config-types",
+    "crates/cust-config",
+    "crates/cust-provider",
+    "crates/cust-exec",
+    "crates/cust-codemode",
+    "crates/cust-session",
+    "crates/cust-tui",
+    "crates/cust-proto",
+    "crates/cust-skill",
+    "crates/cust-tools-api",
+    "crates/cust-tools",
+    "crates/cust-core",
+    "crates/cust-code",
+]
+
+[workspace.package]
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.85"
-description = "A coding agent CLI."
 license = "MIT"
 repository = "https://github.com/jonusnattapong/cust-code"
-
-[[bin]]
-name = "cust"
-path = "src/main.rs"
-
-[dependencies]
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true

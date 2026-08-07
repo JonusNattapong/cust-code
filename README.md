@@ -4,8 +4,7 @@ A coding agent CLI. The binary is `cust`.
 
 ## Status
 
-Pre-alpha — Phase 0 of [PLAN.md](PLAN.md). The binary builds and prints help; it does not
-talk to a model yet.
+All phases (Phase 0 through Phase 34) complete — [PLAN.md](PLAN.md). `cust` is a fully featured coding agent supporting tool calling, process sandboxing with self-protection and Custbox isolation, QuickJS code mode, session storage with leases and rewind, middle-region trajectory compaction with parallel batch compactor, provider capabilities system and failover group, rich Ink-style component TUI engine with live memory budget meter and slash command autocomplete, ACP protocol daemon server, subagents with programmatic REPL invocations, budgeted skill discovery (`SKILL.md`), system reminders, fast in-process git tracking, debounced file watching, trajectory refinement, PTY interactive terminal execution, MCP client connector, atomic model runtime generations, and first-time onboarding wizard.
 
 | Doc | What it is |
 |---|---|
@@ -22,11 +21,19 @@ The four dot-directories divide cleanly: `.knowledge/` is what we learned from *
 projects before writing code, `.learning/` is what we learn from *our own* while writing it,
 `.memory/` is what a fresh session needs to know, and `.doplan/` is the current task list.
 
+## Usage
+
+```bash
+cust "read Cargo.toml and tell me the edition"
+cust -y "write hello to target/output.txt"
+cust ask "reply with the single word: ok"
+```
+
 ## Development
 
 ```bash
-cargo build
-cargo run -- help
+cargo build --workspace
+cargo run --bin cust -- help
 ```
 
 Gate before committing:

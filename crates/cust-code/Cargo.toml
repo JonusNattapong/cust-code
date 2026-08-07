@@ -1,0 +1,27 @@
+[package]
+name = "cust-code"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "cust"
+path = "src/main.rs"
+
+[dependencies]
+cust-config-types = { path = "../cust-config-types" }
+cust-config = { path = "../cust-config" }
+cust-provider = { path = "../cust-provider" }
+cust-exec = { path = "../cust-exec" }
+cust-tools-api = { path = "../cust-tools-api" }
+cust-tools = { path = "../cust-tools" }
+cust-core = { path = "../cust-core" }
+cust-codemode = { path = "../cust-codemode" }
+cust-session = { path = "../cust-session" }
+cust-tui = { path = "../cust-tui" }
+tokio = { version = "1.0", features = ["full"] }
+futures-util = "0.3"
+serde_json = "1.0"
+anyhow = "1.0"

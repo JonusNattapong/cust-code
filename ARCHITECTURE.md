@@ -172,6 +172,7 @@ Windows — before any workspace-boundary check.
 | `cust-config-types` | config types only | anything |
 | `cust-tools-api` | `Tool`, `ToolResult`, `PermissionRequest`, specs | tool impls, core |
 | `cust-proto` | ACP + daemon wire types | core, tui |
+| `cust-skill` | progressive disclosure `SKILL.md` & script skills | core, tui |
 | `cust-config` | loading, layering, profiles | core, tools |
 | `cust-provider` | catalog, generations, streaming, auth, usage | core, tools |
 | `cust-session` | transcript store, leases, rewind, projection | tui, proto surfaces |
