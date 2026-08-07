@@ -1,0 +1,19 @@
+[package]
+name = "cust-code"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+description = "A coding agent CLI."
+license = "MIT"
+repository = "https://github.com/jonusnattapong/cust-code"
+
+[[bin]]
+name = "cust"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
