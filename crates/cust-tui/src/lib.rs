@@ -11,5 +11,8 @@ pub use banner::{BannerInfo, LogoSize, SandboxStatus, Shortcut, DEFAULT_SHORTCUT
 pub use permission::{PermissionMode, SharedPermissionMode};
 pub use runtime::{KeyAction, map_key, run};
 pub use statusline::{StatusLineConfig, StatusLineUpdate};
-pub use ink::{InkColor, InkNode, InkRenderer};
+pub use ink::{
+    BoxView, Component, Container, Differ, FrameKind, InkColor, InkNode, InkRenderer, Key, KeyCode,
+    Loader, SelectItem, SelectList, Spacer, Terminal, Text as InkText, TruncatedText, Tui,
+};
 pub use ui::render;

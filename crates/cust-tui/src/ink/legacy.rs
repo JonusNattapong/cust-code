@@ -1,3 +1,9 @@
+//! The original declarative node tree.
+//!
+//! Predates the [`crate::ink::Component`] port and is kept because existing
+//! call sites render static trees to a string. New UI should use `Component`;
+//! this stays for the one-shot, non-interactive cases it already serves.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -37,15 +43,13 @@ impl InkRenderer {
         match node {
             InkNode::Box { title, children, .. } => {
                 let mut out = String::new();
-                if let Some(t) = title {
-                    out.push_str(&format!("┌─ {} ──────────────────────────┐\n", t));
-                } else {
-                    out.push_str("┌──────────────────────────────────┐\n");
+                match title {
+                    Some(t) => out.push_str(&format!("┌─ {t} ──────────────────────────┐\n")),
+                    None => out.push_str("┌──────────────────────────────────┐\n"),
                 }
                 for child in children {
-                    let child_str = Self::render_to_string(child);
-                    for line in child_str.lines() {
-                        out.push_str(&format!("│ {} │\n", line));
+                    for line in Self::render_to_string(child).lines() {
+                        out.push_str(&format!("│ {line} │\n"));
                     }
                 }
                 out.push_str("└──────────────────────────────────┘\n");
@@ -53,11 +57,12 @@ impl InkRenderer {
             }
             InkNode::Text { content, .. } => content.clone(),
             InkNode::Gauge { label, percent } => {
-                let width = 20;
-                let filled = (width * (*percent as usize)) / 100;
-                let empty = width - filled;
-                let bar: String = "█".repeat(filled) + &"░".repeat(empty);
-                format!("{} [{}] {}%", label, bar, percent)
+                let width = 20usize;
+                // Clamp: an out-of-range percent is a caller bug, not a reason
+                // to underflow the empty-segment count.
+                let filled = ((width * (*percent as usize)) / 100).min(width);
+                let bar = "█".repeat(filled) + &"░".repeat(width - filled);
+                format!("{label} [{bar}] {percent}%")
             }
             InkNode::Banner { art } => art.clone(),
         }
