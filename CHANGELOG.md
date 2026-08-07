@@ -17,3 +17,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this pr
   skills/extensions, boundaries, providers, protocols.
 - `DESIGN-NOTES.md` — condensed version of the above.
 - `PLAN.md` — phased build order with a smoke test per phase.
+- `.doplan/` — the working task list, one file per phase.
+- `.learning/` — lessons and errors from building this project.
+- `.memory/` — durable facts, decisions with their reasoning, and working preferences.

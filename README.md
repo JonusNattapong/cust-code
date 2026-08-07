@@ -11,8 +11,15 @@ talk to a model yet.
 |---|---|
 | [PLAN.md](PLAN.md) | Phased build order, with a smoke test per phase |
 | [DESIGN-NOTES.md](DESIGN-NOTES.md) | Condensed survey of nine coding agents — the design rests on this |
-| [.knowledge/](.knowledge/00-index.md) | The long form, split by subsystem |
+| [.knowledge/](.knowledge/00-index.md) | The survey in long form, split by subsystem |
+| [.doplan/](.doplan/README.md) | What is being worked on right now |
+| [.learning/](.learning/LEARNINGS.md) | Lessons and errors from building this |
+| [.memory/](.memory/MEMORY.md) | Durable facts, decisions, and working preferences |
 | [CHANGELOG.md](CHANGELOG.md) | What changed |
+
+The four dot-directories divide cleanly: `.knowledge/` is what we learned from *other*
+projects before writing code, `.learning/` is what we learn from *our own* while writing it,
+`.memory/` is what a fresh session needs to know, and `.doplan/` is the current task list.
 
 ## Development
 
