@@ -26,13 +26,15 @@ fn render_banner_rows(width: u16) -> Vec<String> {
 }
 
 #[test]
-fn wide_terminal_draws_the_full_logo_and_status() {
+fn wide_terminal_draws_the_mascot_and_status() {
     let rows = render_banner_rows(100);
     let text = rows.join("\n");
 
     assert!(text.contains("Welcome"), "missing panel title:\n{text}");
-    // A distinctive slice of the five-row block art.
-    assert!(text.contains(r"\___|\___/|___/"), "missing full logo:\n{text}");
+    // The pixel-block mascot the wide two-column layout shows instead of
+    // the text logo (narrow terminals keep the text logo — see
+    // `narrow_terminal_degrades_to_a_smaller_logo`).
+    assert!(text.contains("\u{2588}   \u{25bc}   \u{2588}"), "missing mascot:\n{text}");
     assert!(text.contains("v1.2.3"), "missing version:\n{text}");
     assert!(text.contains("openai/gpt-4o"), "missing model:\n{text}");
     assert!(text.contains("sandbox: read-only"), "missing sandbox:\n{text}");

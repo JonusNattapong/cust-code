@@ -171,6 +171,34 @@ pub fn logo_lines(size: LogoSize) -> &'static [&'static str] {
     }
 }
 
+/// A small block-pixel mascot, in the same visual style as Claude Code's
+/// welcome-screen character: a monochrome glyph built from `▄▀█` box-drawing
+/// blocks rather than line art. Shown centered in the wide two-column
+/// welcome layout; the narrow single-column fallback keeps the text logo
+/// instead, since 9 columns of mascot plus a readable status line don't both
+/// fit below [`TWO_COLUMN_MIN_WIDTH`].
+const MASCOT: &[&str] = &[
+    "  \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}  ",
+    " \u{2588}\u{2580}\u{2580}\u{2580}\u{2580}\u{2580}\u{2588} ",
+    "\u{2588}  \u{25cf} \u{25cf}  \u{2588}",
+    "\u{2588}   \u{25bc}   \u{2588}",
+    "\u{2588} \u{2580}\u{2580}\u{2580}\u{2580}\u{2580} \u{2588}",
+    " \u{2588}\u{2584}\u{2584}\u{2584}\u{2584}\u{2584}\u{2588} ",
+    "  \u{2580}   \u{2580}  ",
+];
+
+/// The mascot, centered within `width` columns and colored to match the
+/// logo. Rows shorter than the mascot's own width (a caller passing a tiny
+/// width) are left unpadded rather than panicking.
+fn mascot_lines(width: usize) -> Vec<String> {
+    let mascot_width = MASCOT[0].chars().count();
+    let pad = " ".repeat(width.saturating_sub(mascot_width) / 2);
+    MASCOT
+        .iter()
+        .map(|row| format!("{ANSI_CYAN}{ANSI_BOLD}{pad}{row}{ANSI_RESET}"))
+        .collect()
+}
+
 /// `v0.1.0 · openai/gpt-4o · sandbox: off`
 fn status_line(info: &BannerInfo) -> String {
     format!(
@@ -295,6 +323,47 @@ fn left_column(info: &BannerInfo, width: usize) -> String {
     body
 }
 
+/// Build the left column for the wide two-column layout: welcome line, the
+/// pixel mascot, and the version/model/sandbox status line.
+///
+/// Kept separate from [`left_column`] rather than parameterized, since the
+/// narrow fallback's text logo and the wide layout's mascot degrade on
+/// different axes ([`LogoSize`] vs. a fixed-width centered glyph) and
+/// sharing one function would mean branching on width twice.
+fn left_column_wide(info: &BannerInfo, width: usize) -> String {
+    let mut body = String::new();
+    body.push_str(&welcome_body(info));
+    body.push_str("\n\n");
+
+    for row in mascot_lines(width) {
+        body.push_str(&row);
+        body.push('\n');
+    }
+    body.push('\n');
+
+    body.push_str(ANSI_WHITE);
+    body.push_str(&format!("v{}", info.version));
+    body.push_str(ANSI_RESET);
+    body.push_str(" \u{b7} ");
+    body.push_str(ANSI_MAGENTA);
+    body.push_str(&format!("{}/{}", info.provider, info.model));
+    body.push_str(ANSI_RESET);
+    body.push_str(" \u{b7} sandbox: ");
+    body.push_str(info.sandbox.color_code());
+    body.push_str(ANSI_BOLD);
+    body.push_str(info.sandbox.label());
+    body.push_str(ANSI_RESET);
+
+    if let Some(path) = &info.workspace_path {
+        body.push('\n');
+        body.push_str(ANSI_DIM);
+        body.push_str(path);
+        body.push_str(ANSI_RESET);
+    }
+
+    body
+}
+
 /// Build the right column: a "Tips for getting started" heading and bullets.
 fn tips_column(info: &BannerInfo) -> String {
     let mut body = format!("{ANSI_BOLD}Tips for getting started{ANSI_RESET}\n\n");
@@ -335,7 +404,7 @@ pub fn render(info: &BannerInfo, width: usize) -> Vec<String> {
 
     if content_width >= TWO_COLUMN_MIN_WIDTH {
         let left_width = left_column_width(content_width as u16) as usize;
-        let left = Text::new(left_column(info, left_width)).with_padding(0, 0);
+        let left = Text::new(left_column_wide(info, left_width)).with_padding(0, 0);
         let right = Text::new(tips_column(info)).with_padding(0, 0);
         let mut columns = Columns::new(vec![Box::new(left), Box::new(right)]).with_weights(vec![3, 2]);
         let column_rows = columns.render(content_width);
@@ -439,25 +508,41 @@ mod tests {
         let rows: Vec<String> = render(&info(), 100).iter().map(|l| strip_ansi(l)).collect();
         let text = rows.join("\n");
         assert!(text.contains("Tips for getting started"));
-        assert!(text.contains(r"\___|\___/|___/"), "left column logo missing:\n{text}");
+        assert!(text.contains(MASCOT[2]), "left column mascot missing:\n{text}");
 
         // Proof the columns sit side by side rather than stacked: the "Tips"
         // heading (top of the right column) shares vertical space with the
-        // logo (middle of the left column) instead of appearing only after
+        // mascot (middle of the left column) instead of appearing only after
         // the whole left column has scrolled past.
         let tips_row = rows.iter().position(|l| l.contains("Tips for getting started")).expect("tips heading row");
-        let last_logo_row = rows
+        let last_mascot_row = rows
             .iter()
-            .position(|l| l.contains(LOGO_FULL[4].trim_end()))
-            .expect("last logo row");
+            .position(|l| l.contains(MASCOT[MASCOT.len() - 1]))
+            .expect("last mascot row");
         assert!(
-            tips_row < last_logo_row,
-            "tips heading (row {tips_row}) should appear beside the logo (through row {last_logo_row}), not after it"
+            tips_row < last_mascot_row,
+            "tips heading (row {tips_row}) should appear beside the mascot (through row {last_mascot_row}), not after it"
         );
 
         for row in &rows {
             assert!(visible_width(row) <= 100, "row wider than 100: {row:?}");
         }
+    }
+
+    #[test]
+    fn wide_panel_centers_the_mascot_in_the_left_column() {
+        let rows: Vec<String> = render(&info(), 100).iter().map(|l| strip_ansi(l)).collect();
+        let text = rows.join("\n");
+        for row in MASCOT {
+            assert!(text.contains(row), "mascot row missing: {row:?}\n{text}");
+        }
+    }
+
+    #[test]
+    fn narrow_panel_shows_the_text_logo_not_the_mascot() {
+        let rows: Vec<String> = render(&info(), 40).iter().map(|l| strip_ansi(l)).collect();
+        let text = rows.join("\n");
+        assert!(!text.contains(MASCOT[2]), "mascot should not appear below the two-column threshold:\n{text}");
     }
 
     #[test]
