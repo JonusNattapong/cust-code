@@ -40,6 +40,29 @@ When this happens:
   surfaces real errors in your code) and say so plainly rather than
   papering over it or guessing at their intent.
 
+## Sources you're free to draw on
+
+`cust` is a from-scratch Rust rewrite, but it's explicitly informed by prior
+art — don't reinvent something the survey already settled. When designing or
+implementing a feature:
+
+- **Read `D:\Projects\Github\clew-code\.reference\`** (sibling repo) — source
+  snapshots of eight competitor coding agents (`codex`, `grok-build`,
+  `kimi-cli`, `mistral-vibe`, `hermes-agent`, `MiMo-Code`, `openclaw`,
+  `prime-agent`) plus `clew-code` itself, our own prior TS/Bun agent. This is
+  the same material `DESIGN-NOTES.md` and `.knowledge/*.md` were written
+  from — check those first, they're the distilled version; go to
+  `.reference/` when you need the actual source, not just the summary.
+- **Web search/fetch is fine** for anything current-events-shaped: library
+  docs, API changes, protocol specs (e.g. ACP) — the reference snapshots are
+  a point-in-time survey, not living docs.
+- **Skills**: you can use an existing Claude Code skill, or write a new one,
+  to help build or maintain `cust` itself. `~/.claude/skills/` and
+  `clew-code/.claude/skills/` (e.g. `skill-creator`, `mcp-builder`) are
+  fair game to borrow structure from. This is a tool for *doing the work*,
+  separate from `.knowledge/07-skills-and-extensions.md`'s notes on `cust`
+  someday implementing the `SKILL.md` standard for its own users.
+
 ## Keep this file current
 
 Update this file whenever you land a change that shifts something it
