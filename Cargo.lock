@@ -365,6 +365,7 @@ name = "cust-tools"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "base64",
  "cust-codemode",
  "cust-exec",
  "cust-tools-api",

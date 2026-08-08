@@ -409,6 +409,29 @@ the animation by calling `tick()` once per frame and updating token count.
 
 **Verified:** 6 tests; 126 cumulative ink tests pass; clippy clean.
 
+### Phase 38 — `view_image` tool (`cust-tools`, `cust-provider`)
+
+Multimodal input needs a way in besides pasting base64 by hand. `cust-tools::ViewImageTool`
+reads a file, sniffs the media type from magic bytes (PNG/JPEG/GIF/WebP — not the extension,
+so a renamed or extensionless file still identifies correctly and a wrong extension can't
+smuggle in an unsupported format), rejects anything over 5MB before the read, and returns
+`{media_type, data}` base64 through the existing `ToolResult` contract. Registered in
+`ToolRegistry::with_default_tools_sandboxed` alongside the other direct tools.
+
+`cust_provider::ContentBlock::image_from_tool_result` closes the loop: it reads that same
+`{media_type, data}` shape back into a `ContentBlock::Image`, so a tool call's output folds
+straight into the next `Message` without a bespoke conversion at the call site.
+
+Deliberately kept out of `cust-provider` as a dependency of `cust-tools` — the tool returns
+plain JSON in the existing `ToolResult<Value>` shape; only the caller that already depends on
+both crates (`cust-core`) does the conversion.
+
+**Deferred:** clipboard paste (per-OS APIs — `arboard` or similar) and drag-drop path
+detection in the editor. Both are input-surface concerns that belong with 37b once the editor
+is wired to a live terminal; this phase is the read/encode/wire-format half.
+
+**Verified:** 11 tool tests + 2 provider tests; workspace green, clippy clean.
+
 #### Deferred within 37
 
 `fullscreen.ts` (alternate-screen viewport), the Kitty/iTerm2 image protocols, and

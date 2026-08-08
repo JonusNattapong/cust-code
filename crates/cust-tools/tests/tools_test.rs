@@ -58,5 +58,6 @@ async fn test_tool_registry() {
     assert!(registry.get("search").is_some());
     assert!(registry.get("bash").is_some());
     assert!(registry.get("exec").is_some());
-    assert_eq!(registry.specs().len(), 6);
+    assert!(registry.get("view_image").is_some());
+    assert_eq!(registry.specs().len(), 7);
 }

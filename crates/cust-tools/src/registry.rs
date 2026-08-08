@@ -41,6 +41,7 @@ impl ToolRegistry {
         reg.register(Arc::new(crate::search::SearchTool));
         reg.register(Arc::new(crate::bash::BashTool::new(sandbox)));
         reg.register(Arc::new(crate::exec_js::ExecJsTool));
+        reg.register(Arc::new(crate::view_image::ViewImageTool));
         reg
     }
 }

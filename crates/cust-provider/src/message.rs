@@ -26,6 +26,15 @@ impl ContentBlock {
             data: data.into(),
         }
     }
+
+    /// Build an image block from a `{"media_type": ..., "data": ...}` JSON
+    /// value — the shape `view_image`'s `ToolResult::data` returns, so a tool
+    /// call's output can be folded straight back into the next `Message`.
+    pub fn image_from_tool_result(value: &serde_json::Value) -> Option<Self> {
+        let media_type = value.get("media_type")?.as_str()?;
+        let data = value.get("data")?.as_str()?;
+        Some(Self::image_base64(media_type, data))
+    }
 }
 
 /// A message in the conversation.
@@ -92,6 +101,25 @@ mod tests {
     fn user_with_image_has_two_blocks() {
         let m = Message::user_with_image("describe this", "image/png", "abc123");
         assert_eq!(m.content.len(), 2);
+    }
+
+    #[test]
+    fn image_from_tool_result_reads_the_view_image_shape() {
+        let value = serde_json::json!({ "media_type": "image/png", "data": "abc123" });
+        let block = ContentBlock::image_from_tool_result(&value).expect("block");
+        match block {
+            ContentBlock::Image { media_type, data } => {
+                assert_eq!(media_type, "image/png");
+                assert_eq!(data, "abc123");
+            }
+            _ => panic!("expected an image block"),
+        }
+    }
+
+    #[test]
+    fn image_from_tool_result_rejects_the_wrong_shape() {
+        assert!(ContentBlock::image_from_tool_result(&serde_json::json!({"foo": "bar"})).is_none());
+        assert!(ContentBlock::image_from_tool_result(&serde_json::json!("not an object")).is_none());
     }
 
     #[test]

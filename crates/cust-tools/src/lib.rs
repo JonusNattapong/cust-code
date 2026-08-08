@@ -6,6 +6,7 @@ pub mod patch;
 pub mod read_file;
 pub mod registry;
 pub mod search;
+pub mod view_image;
 pub mod write_file;
 
 pub use bash::BashTool;
@@ -16,4 +17,5 @@ pub use patch::{AppliedChange, AppliedPatchDelta, Hunk, PatchEngine};
 pub use read_file::ReadFileTool;
 pub use registry::ToolRegistry;
 pub use search::SearchTool;
+pub use view_image::ViewImageTool;
 pub use write_file::WriteFileTool;
