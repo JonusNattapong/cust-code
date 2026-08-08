@@ -43,6 +43,8 @@ pub struct TuiState {
     pub workspace: String,
     /// Current git branch, when the workspace is a repository.
     pub git_branch: Option<String>,
+    /// Turn-by-turn record used by `/compact` and auto-compact.
+    pub history: Vec<cust_core::HistoryItem>,
     slash_registry: SlashRegistry,
 }
 
@@ -69,6 +71,7 @@ impl Default for TuiState {
             statusline: StatusLineConfig::default(),
             workspace: String::new(),
             git_branch: None,
+            history: Vec::new(),
             slash_registry: SlashRegistry::new(),
         }
     }
@@ -143,6 +146,10 @@ impl TuiState {
                 }
             }
             "quit" | "exit" => return SlashOutcome::Quit,
+            "compact" => {
+                self.compact_history();
+                return SlashOutcome::Consumed;
+            }
             "resume" => {
                 if args.is_empty() {
                     let store =
@@ -187,6 +194,8 @@ impl TuiState {
                     .slash_registry
                     .expand(input)
                     .unwrap_or_else(|| input.to_string());
+                self.history.push(cust_core::HistoryItem::User(prompt.clone()));
+                self.maybe_auto_compact();
                 return SlashOutcome::Prompt(prompt);
             }
         }
@@ -230,6 +239,71 @@ impl TuiState {
 
     pub fn log_shell_error(&mut self, err: &anyhow::Error) {
         self.logs.push(format!("[!] failed: {err}"));
+    }
+
+    /// Plain-text content of a history item, for token estimation — mirrors
+    /// [`cust_core::compaction::HistoryItem`]'s private `text_content`.
+    fn history_item_text(item: &cust_core::HistoryItem) -> &str {
+        match item {
+            cust_core::HistoryItem::User(t) | cust_core::HistoryItem::Assistant(t) => t,
+            cust_core::HistoryItem::ToolCall { name, .. } => name,
+            cust_core::HistoryItem::ToolResult { summary, .. } => summary,
+        }
+    }
+
+    fn history_tokens(&self) -> usize {
+        self.history
+            .iter()
+            .map(|item| cust_core::Compactor::estimate_tokens(Self::history_item_text(item)))
+            .sum()
+    }
+
+    /// Collapse the compressible middle of `history` into a single summary
+    /// turn, freeing roughly half the context budget. Used by both `/compact`
+    /// and the automatic trigger.
+    pub fn compact_history(&mut self) {
+        let target_tokens = (self.max_context_tokens / 2).max(1);
+        let policy = cust_core::ProtectionPolicy::default();
+
+        let Some(range) =
+            cust_core::Compactor::plan_middle_compression(&self.history, target_tokens, 200, &policy)
+        else {
+            self.log_command("compact", "nothing to compact".to_string());
+            return;
+        };
+
+        let removed = range.len();
+        let mut summary = cust_core::CompactionSummary::new("Continue the prior work in this session");
+        for item in &self.history[range.clone()] {
+            match item {
+                cust_core::HistoryItem::ToolCall { name, .. } => {
+                    summary.progress.push(format!("ran {name}"));
+                }
+                cust_core::HistoryItem::User(text) => {
+                    summary.key_decisions.push(text.chars().take(80).collect());
+                }
+                _ => {}
+            }
+        }
+        let skeleton = summary.to_skeleton_markdown();
+
+        self.history
+            .splice(range, [cust_core::HistoryItem::Assistant(skeleton)]);
+        self.current_tokens = self.history_tokens();
+        self.log_command(
+            "compact",
+            format!("collapsed {removed} turns · context now ~{}k tokens", self.current_tokens / 1000),
+        );
+    }
+
+    /// Auto-compact once the tracked context crosses 80% of budget.
+    fn maybe_auto_compact(&mut self) {
+        if self.max_context_tokens == 0 {
+            return;
+        }
+        if self.current_tokens * 100 >= self.max_context_tokens * 80 {
+            self.compact_history();
+        }
     }
 
     /// Advance to the next permission mode (Shift+Tab) and log the change.
@@ -291,14 +365,27 @@ impl TuiState {
             }
             EventKind::ToolCall { tool, args, .. } => {
                 self.logs.push(format!("[Tool Call] {tool}({args})"));
+                self.history.push(cust_core::HistoryItem::ToolCall {
+                    name: tool,
+                    args,
+                });
             }
             EventKind::ToolResult { ok, summary, .. } => {
                 let status_str = if ok { "OK" } else { "FAIL" };
                 self.logs
                     .push(format!("[Tool Result: {status_str}] {summary}"));
+                self.history.push(cust_core::HistoryItem::ToolResult {
+                    name: status_str.to_string(),
+                    summary,
+                });
             }
             EventKind::TurnEnded { turn: _, reason } => {
                 self.status = format!("Ended ({reason})");
+                if !self.assistant_text.is_empty() {
+                    self.history
+                        .push(cust_core::HistoryItem::Assistant(self.assistant_text.clone()));
+                }
+                self.maybe_auto_compact();
             }
             EventKind::Error { message, .. } => {
                 self.status = format!("Error: {message}");
@@ -375,5 +462,94 @@ mod tests {
         let mut state = TuiState::default();
         state.log_shell_error(&anyhow::anyhow!("boom"));
         assert_eq!(state.logs, vec!["[!] failed: boom".to_string()]);
+    }
+
+    fn padded_history(n: usize) -> Vec<cust_core::HistoryItem> {
+        (0..n)
+            .map(|i| cust_core::HistoryItem::User("x".repeat(400) + &i.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn compact_on_a_small_history_is_a_no_op() {
+        let mut state = TuiState::default();
+        state.history = vec![
+            cust_core::HistoryItem::User("hi".to_string()),
+            cust_core::HistoryItem::Assistant("hello".to_string()),
+        ];
+        state.compact_history();
+        assert_eq!(state.history.len(), 2);
+        assert_eq!(state.logs, vec!["[/compact] nothing to compact".to_string()]);
+    }
+
+    #[test]
+    fn compact_collapses_the_middle_and_shrinks_tracked_tokens() {
+        let mut state = TuiState::default();
+        state.max_context_tokens = 1000; // target_tokens = 500
+        state.history = padded_history(20);
+        let before_len = state.history.len();
+        let before_tokens = state.history_tokens();
+
+        state.compact_history();
+
+        assert!(state.history.len() < before_len, "middle turns should collapse");
+        assert!(
+            state.current_tokens < before_tokens,
+            "compaction should reduce the tracked token estimate"
+        );
+        assert!(state.logs.iter().any(|l| l.starts_with("[/compact] collapsed")));
+    }
+
+    #[test]
+    fn compact_slash_command_is_wired_through_handle_slash() {
+        let mut state = TuiState::default();
+        state.max_context_tokens = 1000;
+        state.history = padded_history(20);
+        let outcome = state.handle_slash("/compact");
+        assert_eq!(outcome, SlashOutcome::Consumed);
+        assert!(state.logs.iter().any(|l| l.starts_with("[/compact]")));
+    }
+
+    #[test]
+    fn turn_ended_with_a_bloated_history_auto_compacts() {
+        let mut state = TuiState::default();
+        state.max_context_tokens = 1000;
+        state.history = padded_history(20);
+        state.current_tokens = 900; // 90% of budget
+        state.assistant_text = "done".to_string();
+
+        state.handle_event(Event {
+            id: 1,
+            generation: 1,
+            kind: EventKind::TurnEnded {
+                turn: 1,
+                reason: "complete".to_string(),
+            },
+        });
+
+        assert!(
+            state.logs.iter().any(|l| l.starts_with("[/compact]")),
+            "crossing the 80% threshold should trigger auto-compact"
+        );
+    }
+
+    #[test]
+    fn turn_ended_under_budget_does_not_auto_compact() {
+        let mut state = TuiState::default();
+        state.max_context_tokens = 1000;
+        state.history = padded_history(4);
+        state.current_tokens = 100;
+        state.assistant_text = "done".to_string();
+
+        state.handle_event(Event {
+            id: 1,
+            generation: 1,
+            kind: EventKind::TurnEnded {
+                turn: 1,
+                reason: "complete".to_string(),
+            },
+        });
+
+        assert!(!state.logs.iter().any(|l| l.starts_with("[/compact]")));
     }
 }
