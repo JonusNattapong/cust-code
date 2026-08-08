@@ -10,19 +10,14 @@ use crate::app::{TuiState, ViewMode};
 use crate::ink::components::{BorderStyle, BoxView, Text};
 use crate::ink::utils::pad_to_width;
 use crate::ink::Component;
-
-const ANSI_RESET: &str = "\u{1b}[0m";
-const ANSI_BOLD: &str = "\u{1b}[1m";
-const ANSI_RED: &str = "\u{1b}[31m";
-const ANSI_GREEN: &str = "\u{1b}[32m";
-const ANSI_YELLOW: &str = "\u{1b}[33m";
-const ANSI_CYAN: &str = "\u{1b}[36m";
+use crate::theme;
 
 fn bordered_panel(title: &str, body: &str, width: usize) -> Vec<String> {
     let mut panel = BoxView::new()
         .with_padding(1, 0)
         .with_border(BorderStyle::Single)
-        .with_title(title);
+        .with_title(title)
+        .with_border_color(theme::primary());
     panel.add_child(Box::new(Text::new(body).with_padding(0, 0)));
     panel.render(width)
 }
@@ -32,10 +27,10 @@ fn context_gauge(percent: u16, current: usize, max: usize, width: usize) -> Stri
     let bar_width = 20usize;
     let filled = (bar_width * percent.min(100) as usize) / 100;
     let bar = "\u{2588}".repeat(filled) + &"\u{2591}".repeat(bar_width - filled);
-    let color = if percent > 80 { ANSI_RED } else { ANSI_GREEN };
-    let text = format!(
-        "{color}{ANSI_BOLD}[{bar}] {percent}% ({current}/{max} tokens){ANSI_RESET}"
-    );
+    let color = if percent > 80 { theme::DANGER.to_string() } else { theme::primary() };
+    let bold = theme::BOLD;
+    let reset = theme::RESET;
+    let text = format!("{color}{bold}[{bar}] {percent}% ({current}/{max} tokens){reset}");
     pad_to_width(&text, width)
 }
 
@@ -57,8 +52,8 @@ pub fn render(state: &TuiState, width: usize) -> Vec<String> {
         ViewMode::TerminalShell => "[Shell Mode]",
     };
     let header_body = format!(
-        "{ANSI_CYAN}Status: {} | Model: {} ({}) | Mode: {}{ANSI_RESET}",
-        state.status, state.active_model, state.active_provider, mode_str
+        "{}Status: {} | Model: {} ({}) | Mode: {}{}",
+        theme::primary(), state.status, state.active_model, state.active_provider, mode_str, theme::RESET
     );
     out.extend(bordered_panel("Header Dashboard", &header_body, width));
 
@@ -89,11 +84,13 @@ pub fn render(state: &TuiState, width: usize) -> Vec<String> {
         "Slash Commands Autocomplete Menu"
     };
     let input_display = if state.slash_suggestions.is_empty() {
-        format!("{ANSI_YELLOW}{}{ANSI_RESET}", state.input_buffer)
+        format!("{}{}{}", theme::primary(), state.input_buffer, theme::RESET)
     } else {
         format!(
-            "{ANSI_YELLOW}{}{ANSI_RESET}\nSuggestions:\n{}",
+            "{}{}{}\nSuggestions:\n{}",
+            theme::primary(),
             state.input_buffer,
+            theme::RESET,
             state.slash_suggestions.join(" | ")
         )
     };

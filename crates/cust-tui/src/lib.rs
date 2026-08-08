@@ -4,6 +4,7 @@ pub mod ink;
 pub mod permission;
 pub mod runtime;
 pub mod statusline;
+pub mod theme;
 pub mod ui;
 
 pub use app::{SlashOutcome, TuiState, ViewMode};

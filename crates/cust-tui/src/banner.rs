@@ -8,6 +8,7 @@
 
 use crate::ink::components::{BorderStyle, BoxView, Columns, Text};
 use crate::ink::Component;
+use crate::theme;
 
 /// Below this width there isn't room for two columns side by side; the
 /// layout collapses to the original single-column banner.
@@ -48,25 +49,17 @@ impl SandboxStatus {
         }
     }
 
-    /// ANSI foreground color code for this status, as used in [`render`].
-    fn color_code(self) -> &'static str {
+    /// ANSI foreground color for this status, as used in [`render`]. `Off`
+    /// is a real danger state (no isolation) so it stays red regardless of
+    /// the green brand theme; the safe states use the brand green itself.
+    fn color_code(self) -> String {
         match self {
-            Self::Off => ANSI_RED,
-            Self::Workspace => ANSI_YELLOW,
-            Self::ReadOnly | Self::Strict => ANSI_GREEN,
+            Self::Off => theme::DANGER.to_string(),
+            Self::Workspace => theme::CAUTION.to_string(),
+            Self::ReadOnly | Self::Strict => theme::primary(),
         }
     }
 }
-
-const ANSI_RESET: &str = "\u{1b}[0m";
-const ANSI_BOLD: &str = "\u{1b}[1m";
-const ANSI_RED: &str = "\u{1b}[31m";
-const ANSI_GREEN: &str = "\u{1b}[32m";
-const ANSI_YELLOW: &str = "\u{1b}[33m";
-const ANSI_WHITE: &str = "\u{1b}[37m";
-const ANSI_MAGENTA: &str = "\u{1b}[35m";
-const ANSI_CYAN: &str = "\u{1b}[36m";
-const ANSI_DIM: &str = "\u{1b}[2m";
 
 /// A single keyboard shortcut shown in the welcome guide.
 #[derive(Debug, Clone, Copy)]
@@ -172,10 +165,13 @@ pub fn logo_lines(size: LogoSize) -> &'static [&'static str] {
 }
 
 /// "Clawd" — the mascot from `clew-code`'s `LogoV2/Clawd.tsx` (`default`
-/// pose, horns on): purple body, red eyes, four rows of block-drawing
-/// glyphs. Shown centered in the wide two-column welcome layout; the narrow
-/// single-column fallback keeps the text logo instead, since 9 columns of
-/// mascot plus a readable status line don't both fit below
+/// pose, horns on), recolored to the green brand theme: the reference art is
+/// purple body / red eyes, but here both come from [`crate::theme`] instead
+/// — a dark shade of the same green for the eyes rather than a separate hue,
+/// so the mascot reads as "the green one" rather than carrying an unrelated
+/// accent color. Shown centered in the wide two-column welcome layout; the
+/// narrow single-column fallback keeps the text logo instead, since 9
+/// columns of mascot plus a readable status line don't both fit below
 /// [`TWO_COLUMN_MIN_WIDTH`].
 ///
 /// Uncolored, for measuring/centering and for tests to search against after
@@ -183,41 +179,31 @@ pub fn logo_lines(size: LogoSize) -> &'static [&'static str] {
 /// doc comment for how the two line up.
 const MASCOT_PLAIN: &[&str] = &[
     "  \u{2597}   \u{2596}  ", // horns
-    " \u{2590} \u{2584}\u{2584}\u{2584} \u{258c} ", // face: eye padding + red eye
-    "\u{259d}\u{259c}     \u{259b}\u{2598}", // body: purple fill between the corner glyphs
+    " \u{2590} \u{2584}\u{2584}\u{2584} \u{258c} ", // face: eye padding + eye
+    "\u{259d}\u{259c}     \u{259b}\u{2598}", // body: fill between the corner glyphs
     "  \u{2598}\u{2598} \u{259d}\u{259d}  ", // legs
 ];
 
-const CLAWD_BODY_RGB: (u8, u8, u8) = (135, 0, 255);
-const CLAWD_EYE_RGB: (u8, u8, u8) = (255, 0, 0);
-
-fn ansi_fg_rgb((r, g, b): (u8, u8, u8)) -> String {
-    format!("\u{1b}[38;2;{r};{g};{b}m")
-}
-
-fn ansi_bg_rgb((r, g, b): (u8, u8, u8)) -> String {
-    format!("\u{1b}[48;2;{r};{g};{b}m")
-}
-
-/// Clawd, centered within `width` columns and colored: purple body glyphs
-/// (foreground) around a solid purple fill (background) with a red eye
-/// glyph in the middle — mirroring how `Clawd.tsx` layers `color` (outline)
-/// against `backgroundColor` (body fill) rather than drawing one flat-color
-/// silhouette. Rows shorter than the mascot's own width (a caller passing a
-/// tiny width) are left unpadded rather than panicking.
+/// Clawd, centered within `width` columns: brand-green outline glyphs
+/// (foreground) around a solid green fill (background) with a darker-green
+/// eye glyph in the middle — mirroring how `Clawd.tsx` layers `color`
+/// (outline) against `backgroundColor` (body fill) rather than drawing one
+/// flat-color silhouette. Rows shorter than the mascot's own width (a caller
+/// passing a tiny width) are left unpadded rather than panicking.
 fn mascot_lines(width: usize) -> Vec<String> {
     let mascot_width = MASCOT_PLAIN[0].chars().count();
     let pad = " ".repeat(width.saturating_sub(mascot_width) / 2);
-    let fg_body = ansi_fg_rgb(CLAWD_BODY_RGB);
-    let bg_body = ansi_bg_rgb(CLAWD_BODY_RGB);
-    let fg_eye = ansi_fg_rgb(CLAWD_EYE_RGB);
+    let fg_body = theme::fg_rgb(theme::PRIMARY_RGB);
+    let bg_body = theme::bg_rgb(theme::PRIMARY_RGB);
+    let fg_eye = theme::fg_rgb(theme::PRIMARY_DARK_RGB);
+    let reset = theme::RESET;
 
-    let horns = format!("{fg_body}  \u{2597}   \u{2596}  {ANSI_RESET}");
+    let horns = format!("{fg_body}  \u{2597}   \u{2596}  {reset}");
     let face = format!(
-        "{fg_body} \u{2590}{ANSI_RESET}{bg_body} {ANSI_RESET}{fg_eye}{bg_body}\u{2584}\u{2584}\u{2584}{ANSI_RESET}{bg_body} {ANSI_RESET}{fg_body}\u{258c} {ANSI_RESET}"
+        "{fg_body} \u{2590}{reset}{bg_body} {reset}{fg_eye}{bg_body}\u{2584}\u{2584}\u{2584}{reset}{bg_body} {reset}{fg_body}\u{258c} {reset}"
     );
-    let body = format!("{fg_body}\u{259d}\u{259c}{ANSI_RESET}{bg_body}     {ANSI_RESET}{fg_body}\u{259b}\u{2598}{ANSI_RESET}");
-    let legs = format!("{fg_body}  \u{2598}\u{2598} \u{259d}\u{259d}  {ANSI_RESET}");
+    let body = format!("{fg_body}\u{259d}\u{259c}{reset}{bg_body}     {reset}{fg_body}\u{259b}\u{2598}{reset}");
+    let legs = format!("{fg_body}  \u{2598}\u{2598} \u{259d}\u{259d}  {reset}");
 
     [horns, face, body, legs].into_iter().map(|row| format!("{pad}{row}")).collect()
 }
@@ -302,9 +288,32 @@ pub fn height_for(info: &BannerInfo, width: u16) -> u16 {
 
 fn welcome_body(info: &BannerInfo) -> String {
     match &info.user_name {
-        Some(name) => format!("{ANSI_BOLD}Welcome back {name}!{ANSI_RESET}"),
-        None => format!("{ANSI_BOLD}Welcome{ANSI_RESET}"),
+        Some(name) => theme::primary_bold(&format!("Welcome back {name}!")),
+        None => theme::primary_bold("Welcome"),
     }
+}
+
+/// The `v{version} · {provider}/{model} · sandbox: {label}[\npath]` status
+/// line shared by [`left_column`] and [`left_column_wide`].
+fn status_summary(info: &BannerInfo) -> String {
+    let mut body = String::new();
+    body.push_str(&theme::primary_dim(&format!("v{}", info.version)));
+    body.push_str(" \u{b7} ");
+    body.push_str(&theme::primary_bold(&format!("{}/{}", info.provider, info.model)));
+    body.push_str(" \u{b7} sandbox: ");
+    body.push_str(&info.sandbox.color_code());
+    body.push_str(theme::BOLD);
+    body.push_str(info.sandbox.label());
+    body.push_str(theme::RESET);
+
+    if let Some(path) = &info.workspace_path {
+        body.push('\n');
+        body.push_str(theme::DIM);
+        body.push_str(path);
+        body.push_str(theme::RESET);
+    }
+
+    body
 }
 
 /// Build the left column: welcome line, logo, and the version/model/sandbox
@@ -314,34 +323,16 @@ fn left_column(info: &BannerInfo, width: usize) -> String {
     body.push_str(&welcome_body(info));
     body.push_str("\n\n");
 
+    let fg_body = theme::primary();
     for row in logo_lines(LogoSize::for_width(width as u16)) {
-        body.push_str(ANSI_CYAN);
-        body.push_str(ANSI_BOLD);
+        body.push_str(&fg_body);
+        body.push_str(theme::BOLD);
         body.push_str(row);
-        body.push_str(ANSI_RESET);
+        body.push_str(theme::RESET);
         body.push('\n');
     }
     body.push('\n');
-
-    body.push_str(ANSI_WHITE);
-    body.push_str(&format!("v{}", info.version));
-    body.push_str(ANSI_RESET);
-    body.push_str(" \u{b7} ");
-    body.push_str(ANSI_MAGENTA);
-    body.push_str(&format!("{}/{}", info.provider, info.model));
-    body.push_str(ANSI_RESET);
-    body.push_str(" \u{b7} sandbox: ");
-    body.push_str(info.sandbox.color_code());
-    body.push_str(ANSI_BOLD);
-    body.push_str(info.sandbox.label());
-    body.push_str(ANSI_RESET);
-
-    if let Some(path) = &info.workspace_path {
-        body.push('\n');
-        body.push_str(ANSI_DIM);
-        body.push_str(path);
-        body.push_str(ANSI_RESET);
-    }
+    body.push_str(&status_summary(info));
 
     body
 }
@@ -363,37 +354,18 @@ fn left_column_wide(info: &BannerInfo, width: usize) -> String {
         body.push('\n');
     }
     body.push('\n');
-
-    body.push_str(ANSI_WHITE);
-    body.push_str(&format!("v{}", info.version));
-    body.push_str(ANSI_RESET);
-    body.push_str(" \u{b7} ");
-    body.push_str(ANSI_MAGENTA);
-    body.push_str(&format!("{}/{}", info.provider, info.model));
-    body.push_str(ANSI_RESET);
-    body.push_str(" \u{b7} sandbox: ");
-    body.push_str(info.sandbox.color_code());
-    body.push_str(ANSI_BOLD);
-    body.push_str(info.sandbox.label());
-    body.push_str(ANSI_RESET);
-
-    if let Some(path) = &info.workspace_path {
-        body.push('\n');
-        body.push_str(ANSI_DIM);
-        body.push_str(path);
-        body.push_str(ANSI_RESET);
-    }
+    body.push_str(&status_summary(info));
 
     body
 }
 
 /// Build the right column: a "Tips for getting started" heading and bullets.
 fn tips_column(info: &BannerInfo) -> String {
-    let mut body = format!("{ANSI_BOLD}Tips for getting started{ANSI_RESET}\n\n");
+    let mut body = format!("{}Tips for getting started{}\n\n", theme::BOLD, theme::RESET);
     for tip in &info.tips {
-        body.push_str(ANSI_DIM);
+        body.push_str(theme::DIM);
         body.push_str("\u{2022} ");
-        body.push_str(ANSI_RESET);
+        body.push_str(theme::RESET);
         body.push_str(tip);
         body.push('\n');
     }
@@ -414,7 +386,8 @@ pub fn render(info: &BannerInfo, width: usize) -> Vec<String> {
     let mut panel = BoxView::new()
         .with_padding(1, 0)
         .with_border(BorderStyle::Rounded)
-        .with_title("Welcome");
+        .with_title("Welcome")
+        .with_border_color(theme::primary());
 
     // The border and the panel's own padding (1 column each side) both eat
     // into what children get to wrap at — matches BoxView's internal
@@ -438,9 +411,9 @@ pub fn render(info: &BannerInfo, width: usize) -> Vec<String> {
 
     let mut hints = String::new();
     for hint in shortcut_lines(&info.shortcuts, content_width as u16) {
-        hints.push_str(ANSI_DIM);
+        hints.push_str(theme::DIM);
         hints.push_str(&hint);
-        hints.push_str(ANSI_RESET);
+        hints.push_str(theme::RESET);
         hints.push('\n');
     }
     panel.add_child(Box::new(Text::new(hints.trim_end_matches('\n')).with_padding(0, 0)));

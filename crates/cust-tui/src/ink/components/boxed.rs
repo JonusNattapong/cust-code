@@ -13,9 +13,14 @@ pub struct BoxView {
     padding_y: usize,
     bg: Option<BgFn>,
     border: Option<BorderStyle>,
+    /// ANSI escape prefix applied to the border and title; `None` leaves
+    /// them in the terminal's default foreground.
+    border_color: Option<String>,
     title: Option<String>,
     cache: Option<(usize, Vec<String>, Vec<String>)>,
 }
+
+const BOX_ANSI_RESET: &str = "\u{1b}[0m";
 
 /// Box-drawing characters for a bordered box.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,6 +77,14 @@ impl BoxView {
         self
     }
 
+    /// Color the border (and title) with a raw ANSI escape prefix, e.g.
+    /// `"\x1b[38;2;0;200;83m"`. Ignored when there is no border.
+    pub fn with_border_color(mut self, ansi_prefix: impl Into<String>) -> Self {
+        self.border_color = Some(ansi_prefix.into());
+        self.cache = None;
+        self
+    }
+
     pub fn add_child(&mut self, child: std::boxed::Box<dyn Component>) {
         self.children.push(child);
         self.cache = None;
@@ -93,7 +106,7 @@ impl BoxView {
     fn top_border(&self, style: BorderStyle, width: usize) -> String {
         let (tl, tr, _, _, h, _) = style.chars();
         let inner = width.saturating_sub(2);
-        match &self.title {
+        let plain = match &self.title {
             // `┌─ title ─...─┐` needs 3 cells of framing around the title.
             Some(t) if visible_width(t) + 3 <= inner => {
                 let label = format!("{h} {t} ");
@@ -101,6 +114,14 @@ impl BoxView {
                 format!("{tl}{label}{}{tr}", h.to_string().repeat(fill))
             }
             _ => format!("{tl}{}{tr}", h.to_string().repeat(inner)),
+        };
+        self.colorize(&plain)
+    }
+
+    fn colorize(&self, s: &str) -> String {
+        match &self.border_color {
+            Some(prefix) => format!("{prefix}{s}{BOX_ANSI_RESET}"),
+            None => s.to_string(),
         }
     }
 }
@@ -150,14 +171,15 @@ impl Component for BoxView {
             None => body,
             Some(style) => {
                 let (_, _, bl, br, h, v) = style.chars();
+                let side = self.colorize(&v.to_string());
                 let mut out = vec![self.top_border(style, width)];
                 for line in body {
-                    out.push(format!("{v}{line}{v}"));
+                    out.push(format!("{side}{line}{side}"));
                 }
-                out.push(format!(
+                out.push(self.colorize(&format!(
                     "{bl}{}{br}",
                     h.to_string().repeat(width.saturating_sub(2))
-                ));
+                )));
                 out
             }
         };
@@ -248,5 +270,30 @@ mod tests {
         b.add_child(text_child("aaa bbb"));
         let lines = b.render(10);
         assert_eq!(lines.len(), 4); // top + 2 content + bottom
+    }
+
+    #[test]
+    fn border_color_wraps_border_chars_and_leaves_content_alone() {
+        let mut b = BoxView::new()
+            .with_padding(0, 0)
+            .with_border(BorderStyle::Single)
+            .with_title("Log")
+            .with_border_color("\u{1b}[38;2;0;200;83m");
+        b.add_child(text_child("hi"));
+        let lines = b.render(20);
+        assert!(lines[0].starts_with("\u{1b}[38;2;0;200;83m"));
+        assert!(lines[0].ends_with("\u{1b}[0m"));
+        // The content row's escape sequence brackets only the border char,
+        // not the text between them.
+        assert!(lines[1].contains("\u{1b}[38;2;0;200;83m\u{2502}\u{1b}[0mhi"));
+        assert!(lines[2].starts_with("\u{1b}[38;2;0;200;83m"));
+    }
+
+    #[test]
+    fn no_border_color_leaves_border_chars_plain() {
+        let mut b = BoxView::new().with_padding(0, 0).with_border(BorderStyle::Single);
+        b.add_child(text_child("hi"));
+        let lines = b.render(10);
+        assert!(!lines[0].contains('\u{1b}'));
     }
 }

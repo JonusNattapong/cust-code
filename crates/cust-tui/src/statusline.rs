@@ -6,6 +6,7 @@
 use crate::app::TuiState;
 use crate::permission::PermissionMode;
 use crate::ink::utils::truncate_to_width;
+use crate::theme;
 
 /// Which segments the status line shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,16 +136,6 @@ pub fn render_text(state: &TuiState, config: &StatusLineConfig) -> String {
     parts.join("  ·  ")
 }
 
-const ANSI_RESET: &str = "\u{1b}[0m";
-const ANSI_BOLD: &str = "\u{1b}[1m";
-const ANSI_RED: &str = "\u{1b}[31m";
-const ANSI_GREEN: &str = "\u{1b}[32m";
-const ANSI_YELLOW: &str = "\u{1b}[33m";
-const ANSI_BLUE: &str = "\u{1b}[34m";
-const ANSI_MAGENTA: &str = "\u{1b}[35m";
-const ANSI_CYAN: &str = "\u{1b}[36m";
-const ANSI_DARK_GRAY: &str = "\u{1b}[90m";
-
 /// Render the status line as one ANSI-styled row, padded to `width`.
 ///
 /// An empty vec means the line is disabled — callers should reserve zero rows
@@ -158,40 +149,43 @@ pub fn render(state: &TuiState, config: &StatusLineConfig, width: usize) -> Vec<
     let mut line = String::new();
     let push = |line: &mut String, text: String, color: &str| {
         if !line.is_empty() {
-            line.push_str(ANSI_DARK_GRAY);
+            line.push_str(theme::NEUTRAL);
             line.push_str("  \u{b7}  ");
-            line.push_str(ANSI_RESET);
+            line.push_str(theme::RESET);
         }
         line.push_str(color);
-        line.push_str(ANSI_BOLD);
+        line.push_str(theme::BOLD);
         line.push_str(&text);
-        line.push_str(ANSI_RESET);
+        line.push_str(theme::RESET);
     };
 
+    // Model/workspace/branch aren't semantic states — they're all the brand
+    // green, distinguished only by their glyph, not a rainbow of hues.
+    let primary = theme::primary();
     if config.model {
-        push(&mut line, format!("\u{2726} {}", state.active_model), ANSI_MAGENTA);
+        push(&mut line, format!("\u{2726} {}", state.active_model), &primary);
     }
     if config.workspace {
-        push(&mut line, format!("\u{25aa} {}", state.workspace), ANSI_CYAN);
+        push(&mut line, format!("\u{25aa} {}", state.workspace), &primary);
     }
     if config.branch {
         if let Some(branch) = &state.git_branch {
-            push(&mut line, format!("\u{2442} {branch}"), ANSI_BLUE);
+            push(&mut line, format!("\u{2442} {branch}"), &primary);
         }
     }
     if config.context {
         let percent = state.memory_percent();
-        let color = if percent > 80 { ANSI_RED } else { ANSI_GREEN };
-        push(&mut line, format!("ctx {percent}%"), color);
+        let color = if percent > 80 { theme::DANGER.to_string() } else { theme::primary() };
+        push(&mut line, format!("ctx {percent}%"), &color);
     }
     if config.permission {
         let mode = state.permission_mode.get();
         let color = match mode {
-            PermissionMode::BypassPermissions => ANSI_RED,
-            PermissionMode::AcceptEdits => ANSI_YELLOW,
-            PermissionMode::Ask | PermissionMode::Plan => ANSI_DARK_GRAY,
+            PermissionMode::BypassPermissions => theme::DANGER.to_string(),
+            PermissionMode::AcceptEdits => theme::CAUTION.to_string(),
+            PermissionMode::Ask | PermissionMode::Plan => theme::NEUTRAL.to_string(),
         };
-        push(&mut line, mode.footer(), color);
+        push(&mut line, mode.footer(), &color);
     }
 
     // A narrow terminal gets a clipped-with-ellipsis line rather than one
