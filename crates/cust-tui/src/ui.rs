@@ -34,6 +34,28 @@ fn context_gauge(percent: u16, current: usize, max: usize, width: usize) -> Stri
     pad_to_width(&text, width)
 }
 
+/// The prompt: a horizontal rule, a `❯`-prefixed input row (plus suggestion
+/// rows when slash completions are showing), then a closing rule.
+///
+/// Matches `clew-code`'s actual `PromptInput` framing — `borderLeft={false}
+/// borderRight={false} borderBottom` — rather than a 4-sided box: side walls
+/// around a single line of text read as a mistake (an empty box), not a
+/// prompt, so `clew-code` never draws them there.
+fn input_line(state: &TuiState, width: usize) -> Vec<String> {
+    let rule = format!("{}{}{}", theme::primary(), "\u{2500}".repeat(width), theme::RESET);
+    // Only the prompt glyph carries the theme color; typed text stays the
+    // terminal's default foreground, matching clew-code's PromptChar (themed)
+    // vs. the text input itself (untouched).
+    let prompt = format!("{}{}\u{276f}{} {}", theme::primary(), theme::BOLD, theme::RESET, state.input_buffer);
+
+    let mut out = vec![rule.clone(), pad_to_width(&prompt, width)];
+    for suggestion in &state.slash_suggestions {
+        out.push(pad_to_width(&format!("{}{}{}", theme::DIM, suggestion, theme::RESET), width));
+    }
+    out.push(rule);
+    out
+}
+
 /// Render the full frame at `width`, returning one string per row.
 ///
 /// Callers own the height budget: pass this straight to a differential
@@ -77,24 +99,8 @@ pub fn render(state: &TuiState, width: usize) -> Vec<String> {
     };
     out.extend(bordered_panel(body_title, &body_text, width));
 
-    // 4. Input box (and slash-command suggestions, if any)
-    let input_title = if state.slash_suggestions.is_empty() {
-        "Input Prompt (Type / for Slash Commands)"
-    } else {
-        "Slash Commands Autocomplete Menu"
-    };
-    let input_display = if state.slash_suggestions.is_empty() {
-        format!("{}{}{}", theme::primary(), state.input_buffer, theme::RESET)
-    } else {
-        format!(
-            "{}{}{}\nSuggestions:\n{}",
-            theme::primary(),
-            state.input_buffer,
-            theme::RESET,
-            state.slash_suggestions.join(" | ")
-        )
-    };
-    out.extend(bordered_panel(input_title, &input_display, width));
+    // 4. Prompt input — horizontal rules, no side walls (see input_line).
+    out.extend(input_line(state, width));
 
     // 5. Status line — model, workspace, branch, context, permission mode.
     out.extend(crate::statusline::render(state, &state.statusline, width));
@@ -114,7 +120,31 @@ mod tests {
         let text = strip_ansi(&lines.join("\n"));
         assert!(text.contains("Header Dashboard"));
         assert!(text.contains("Context Window Memory Budget"));
-        assert!(text.contains("Input Prompt"));
+        // The prompt has no title/box — its presence is the ❯ row plus the
+        // rules bracketing it, checked in input_line's own tests below.
+        assert!(text.contains('\u{276f}'), "prompt glyph missing:\n{text}");
+    }
+
+    #[test]
+    fn input_line_has_no_side_walls() {
+        let mut state = TuiState::default();
+        state.input_buffer = "hello".to_string();
+        let lines = strip_ansi(&input_line(&state, 20).join("\n"));
+        // A horizontal rule, not a box: no │ characters anywhere in the row.
+        assert!(!lines.contains('\u{2502}'), "prompt should not draw side walls:\n{lines}");
+        assert!(lines.contains("\u{2500}"), "missing the horizontal rule:\n{lines}");
+        assert!(lines.contains("\u{276f} hello"), "missing the prompt + typed text:\n{lines}");
+    }
+
+    #[test]
+    fn input_line_shows_slash_suggestions_between_the_rules() {
+        let mut state = TuiState::default();
+        state.input_buffer = "/h".to_string();
+        state.slash_suggestions = vec!["/help — show help".to_string()];
+        let rows = input_line(&state, 30);
+        // rule, prompt, suggestion, rule
+        assert_eq!(rows.len(), 4);
+        assert!(strip_ansi(&rows[2]).contains("/help"));
     }
 
     #[test]
