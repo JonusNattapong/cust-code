@@ -4,13 +4,8 @@
 //! keyboard shortcut guide. The layout degrades gracefully as the terminal
 //! narrows: full block art, then a compact wordmark, then a single line.
 
-use ratatui::{
-    Frame,
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-};
+use crate::ink::components::{BorderStyle, BoxView, Text};
+use crate::ink::Component;
 
 /// Sandbox state shown in the welcome header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -47,14 +42,25 @@ impl SandboxStatus {
         }
     }
 
-    fn color(self) -> Color {
+    /// ANSI foreground color code for this status, as used in [`render`].
+    fn color_code(self) -> &'static str {
         match self {
-            Self::Off => Color::Red,
-            Self::Workspace => Color::Yellow,
-            Self::ReadOnly | Self::Strict => Color::Green,
+            Self::Off => ANSI_RED,
+            Self::Workspace => ANSI_YELLOW,
+            Self::ReadOnly | Self::Strict => ANSI_GREEN,
         }
     }
 }
+
+const ANSI_RESET: &str = "\u{1b}[0m";
+const ANSI_BOLD: &str = "\u{1b}[1m";
+const ANSI_RED: &str = "\u{1b}[31m";
+const ANSI_GREEN: &str = "\u{1b}[32m";
+const ANSI_YELLOW: &str = "\u{1b}[33m";
+const ANSI_WHITE: &str = "\u{1b}[37m";
+const ANSI_MAGENTA: &str = "\u{1b}[35m";
+const ANSI_CYAN: &str = "\u{1b}[36m";
+const ANSI_DIM: &str = "\u{1b}[2m";
 
 /// A single keyboard shortcut shown in the welcome guide.
 #[derive(Debug, Clone, Copy)]
@@ -207,51 +213,51 @@ pub fn height_for(info: &BannerInfo, width: u16) -> u16 {
     logo + 1 + hints + 2
 }
 
-/// Draw the banner into `area` as a bordered welcome panel.
-pub fn render(frame: &mut Frame<'_>, area: Rect, info: &BannerInfo) {
-    let inner_width = area.width.saturating_sub(2);
-    let mut lines: Vec<Line<'_>> = logo_lines(LogoSize::for_width(inner_width))
-        .iter()
-        .map(|row| {
-            Line::from(Span::styled(
-                *row,
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            ))
-        })
-        .collect();
+/// Render the banner as a bordered `ink` panel: logo lines, the status line,
+/// and shortcut hints, each styled to match the old ratatui rendering.
+///
+/// Width is passed explicitly rather than pulled from the terminal because
+/// `ink` components render on demand — the caller supplies the same width it
+/// will hand the rest of the frame.
+pub fn render(info: &BannerInfo, width: usize) -> Vec<String> {
+    let inner_width = width.saturating_sub(2);
+    let mut body = String::new();
 
-    lines.push(Line::from(vec![
-        Span::styled(
-            format!("v{}", info.version),
-            Style::default().fg(Color::White),
-        ),
-        Span::raw(" · "),
-        Span::styled(
-            format!("{}/{}", info.provider, info.model),
-            Style::default().fg(Color::Magenta),
-        ),
-        Span::raw(" · "),
-        Span::raw("sandbox: "),
-        Span::styled(
-            info.sandbox.label(),
-            Style::default()
-                .fg(info.sandbox.color())
-                .add_modifier(Modifier::BOLD),
-        ),
-    ]));
-
-    for hint in shortcut_lines(&info.shortcuts, inner_width) {
-        lines.push(Line::from(Span::styled(
-            hint,
-            Style::default().fg(Color::DarkGray),
-        )));
+    for row in logo_lines(LogoSize::for_width(inner_width as u16)) {
+        body.push_str(ANSI_CYAN);
+        body.push_str(ANSI_BOLD);
+        body.push_str(row);
+        body.push_str(ANSI_RESET);
+        body.push('\n');
     }
 
-    let panel = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(" Welcome "));
-    frame.render_widget(panel, area);
+    body.push_str(ANSI_WHITE);
+    body.push_str(&format!("v{}", info.version));
+    body.push_str(ANSI_RESET);
+    body.push_str(" \u{b7} ");
+    body.push_str(ANSI_MAGENTA);
+    body.push_str(&format!("{}/{}", info.provider, info.model));
+    body.push_str(ANSI_RESET);
+    body.push_str(" \u{b7} sandbox: ");
+    body.push_str(info.sandbox.color_code());
+    body.push_str(ANSI_BOLD);
+    body.push_str(info.sandbox.label());
+    body.push_str(ANSI_RESET);
+    body.push('\n');
+
+    for hint in shortcut_lines(&info.shortcuts, inner_width as u16) {
+        body.push_str(ANSI_DIM);
+        body.push_str(&hint);
+        body.push_str(ANSI_RESET);
+        body.push('\n');
+    }
+
+    let mut panel = BoxView::new()
+        .with_padding(1, 0)
+        .with_border(BorderStyle::Rounded)
+        .with_title("Welcome");
+    panel.add_child(Box::new(Text::new(body.trim_end_matches('\n')).with_padding(0, 0)));
+    panel.render(width)
 }
 
 #[cfg(test)]

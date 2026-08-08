@@ -1,8 +1,9 @@
-//! Buffer-level tests for the welcome banner panel across terminal widths.
+//! Row-level tests for the welcome banner panel and full frame across
+//! terminal widths, rendered through `ink` rather than a ratatui backend.
 
 use cust_tui::banner::{self, BannerInfo, SandboxStatus};
-use cust_tui::{TuiState, ui};
-use ratatui::{Terminal, backend::TestBackend, layout::Rect};
+use cust_tui::ink::utils::{strip_ansi, visible_width};
+use cust_tui::{ui, TuiState};
 
 fn info() -> BannerInfo {
     BannerInfo {
@@ -14,28 +15,11 @@ fn info() -> BannerInfo {
     }
 }
 
-/// The drawn buffer, one string per row, trailing blanks trimmed.
-fn draw<F: FnOnce(&mut ratatui::Frame<'_>)>(width: u16, height: u16, f: F) -> Vec<String> {
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    terminal.draw(|frame| f(frame)).unwrap();
-    let buffer = terminal.backend().buffer().clone();
-    (0..buffer.area.height)
-        .map(|y| {
-            (0..buffer.area.width)
-                .map(|x| buffer[(x, y)].symbol())
-                .collect::<String>()
-                .trim_end()
-                .to_string()
-        })
-        .collect()
-}
-
 fn render_banner_rows(width: u16) -> Vec<String> {
-    let info = info();
-    let height = banner::height_for(&info, width);
-    draw(width, height, |frame| {
-        banner::render(frame, Rect::new(0, 0, width, height), &info)
-    })
+    banner::render(&info(), width as usize)
+        .iter()
+        .map(|l| strip_ansi(l))
+        .collect()
 }
 
 #[test]
@@ -54,22 +38,21 @@ fn wide_terminal_draws_the_full_logo_and_status() {
 
 #[test]
 fn narrow_terminal_degrades_to_a_smaller_logo() {
-    let wide = render_banner_rows(100).join("\n");
     let narrow = render_banner_rows(30).join("\n");
 
     assert!(!narrow.contains(r"\___|\___/|___/"), "full logo at 30 cols:\n{narrow}");
     assert!(narrow.contains("code"), "missing wordmark:\n{narrow}");
     // The status line still gets through, just on more rows than the wide case.
     assert!(narrow.contains("v1.2.3"), "missing version:\n{narrow}");
-    assert!(wide.lines().count() < narrow.lines().count());
+    assert!(render_banner_rows(100).len() < render_banner_rows(30).len());
 }
 
 #[test]
 fn every_row_fits_inside_the_panel_border() {
     for width in [30u16, 50, 100] {
-        for row in render_banner_rows(width) {
+        for row in banner::render(&info(), width as usize) {
             assert!(
-                row.chars().count() <= width as usize,
+                visible_width(&row) <= width as usize,
                 "row wider than {width}: {row:?}"
             );
         }
@@ -79,7 +62,7 @@ fn every_row_fits_inside_the_panel_border() {
 #[test]
 fn permission_footer_shows_the_current_mode() {
     let mut state = TuiState::default();
-    let ask = draw(80, 30, |frame| ui::render(frame, &state)).join("\n");
+    let ask = strip_ansi(&ui::render(&state, 80).join("\n"));
     assert!(
         ask.contains("⏵⏵ ask every time on (shift+tab to cycle)"),
         "default mode footer missing:\n{ask}"
@@ -88,7 +71,7 @@ fn permission_footer_shows_the_current_mode() {
     // Shift+Tab twice: ask -> accept edits -> bypass permissions.
     state.cycle_permission_mode();
     state.cycle_permission_mode();
-    let bypass = draw(80, 30, |frame| ui::render(frame, &state)).join("\n");
+    let bypass = strip_ansi(&ui::render(&state, 80).join("\n"));
     assert!(
         bypass.contains("⏵⏵ bypass permissions on (shift+tab to cycle)"),
         "cycled mode footer missing:\n{bypass}"
@@ -98,18 +81,18 @@ fn permission_footer_shows_the_current_mode() {
 #[test]
 fn banner_occupies_the_top_of_the_ui_then_disappears_after_a_turn() {
     let mut state = TuiState::default();
-    let with_banner = draw(80, 30, |frame| ui::render(frame, &state));
+    let with_banner = strip_ansi(&ui::render(&state, 80).join("\n"));
     assert!(
-        with_banner.join("\n").contains("Welcome"),
+        with_banner.contains("Welcome"),
         "banner missing on a fresh session"
     );
 
     state.show_banner = false;
-    let without = draw(80, 30, |frame| ui::render(frame, &state));
+    let without = strip_ansi(&ui::render(&state, 80).join("\n"));
     assert!(
-        !without.join("\n").contains("Welcome"),
+        !without.contains("Welcome"),
         "banner still drawn after it was dismissed"
     );
     // The header takes over the top rows once the banner is gone.
-    assert!(without.join("\n").contains("Header Dashboard"));
+    assert!(without.contains("Header Dashboard"));
 }

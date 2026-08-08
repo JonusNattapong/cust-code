@@ -1,113 +1,162 @@
+//! Composes the whole TUI frame: banner, header, context gauge, body,
+//! input box, and status line — each an `ink` panel stacked top to bottom.
+//!
+//! Replaces the six-pane ratatui `Layout` (37e): instead of fixed-height
+//! chunks in an alternate screen, this returns the frame as plain lines that
+//! the caller diffs and writes inline, leaving finished output in the
+//! terminal's own scrollback.
+
 use crate::app::{TuiState, ViewMode};
-use ratatui::{
-    Frame,
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Gauge, Paragraph},
-};
+use crate::ink::components::{BorderStyle, BoxView, Text};
+use crate::ink::utils::pad_to_width;
+use crate::ink::Component;
 
-pub fn render(frame: &mut Frame<'_>, state: &TuiState) {
-    let area = frame.area();
-    let banner_height = if state.show_banner {
-        crate::banner::height_for(&state.banner, area.width)
-    } else {
-        0
-    };
+const ANSI_RESET: &str = "\u{1b}[0m";
+const ANSI_BOLD: &str = "\u{1b}[1m";
+const ANSI_RED: &str = "\u{1b}[31m";
+const ANSI_GREEN: &str = "\u{1b}[32m";
+const ANSI_YELLOW: &str = "\u{1b}[33m";
+const ANSI_CYAN: &str = "\u{1b}[36m";
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(banner_height), // Welcome Banner (0 once a turn starts)
-            Constraint::Length(3),             // Header Dashboard
-            Constraint::Length(3),             // Context Memory Gauge
-            Constraint::Min(5),                // Assistant Body / Logs
-            Constraint::Length(4),             // Prompt Input Box & Slash Menu
-            Constraint::Length(1),             // Permission Mode Footer
-        ])
-        .split(area);
+fn bordered_panel(title: &str, body: &str, width: usize) -> Vec<String> {
+    let mut panel = BoxView::new()
+        .with_padding(1, 0)
+        .with_border(BorderStyle::Single)
+        .with_title(title);
+    panel.add_child(Box::new(Text::new(body).with_padding(0, 0)));
+    panel.render(width)
+}
 
-    if state.show_banner && chunks[0].height > 0 {
-        crate::banner::render(frame, chunks[0], &state.banner);
+/// A single-row percentage gauge: `[████░░░░] 42% (12,800/128,000 tokens)`.
+fn context_gauge(percent: u16, current: usize, max: usize, width: usize) -> String {
+    let bar_width = 20usize;
+    let filled = (bar_width * percent.min(100) as usize) / 100;
+    let bar = "\u{2588}".repeat(filled) + &"\u{2591}".repeat(bar_width - filled);
+    let color = if percent > 80 { ANSI_RED } else { ANSI_GREEN };
+    let text = format!(
+        "{color}{ANSI_BOLD}[{bar}] {percent}% ({current}/{max} tokens){ANSI_RESET}"
+    );
+    pad_to_width(&text, width)
+}
+
+/// Render the full frame at `width`, returning one string per row.
+///
+/// Callers own the height budget: pass this straight to a differential
+/// renderer, which only repaints the rows that actually changed between
+/// calls.
+pub fn render(state: &TuiState, width: usize) -> Vec<String> {
+    let mut out = Vec::new();
+
+    if state.show_banner {
+        out.extend(crate::banner::render(&state.banner, width));
     }
-    let chunks = &chunks[1..];
 
-    // 1. Header Dashboard
+    // 1. Header dashboard
     let mode_str = match state.view_mode {
         ViewMode::Agent => "[Agent Mode]",
         ViewMode::TerminalShell => "[Shell Mode]",
     };
-    let header_text = format!(
-        " cust TUI — Status: {} | Model: {} ({}) | Mode: {}",
+    let header_body = format!(
+        "{ANSI_CYAN}Status: {} | Model: {} ({}) | Mode: {}{ANSI_RESET}",
         state.status, state.active_model, state.active_provider, mode_str
     );
-    let header = Paragraph::new(header_text).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(" Header Dashboard ")
-            .style(Style::default().fg(Color::Cyan)),
-    );
-    frame.render_widget(header, chunks[0]);
+    out.extend(bordered_panel("Header Dashboard", &header_body, width));
 
-    // 2. Live Context Memory Gauge
+    // 2. Live context memory gauge
     let percent = state.memory_percent();
-    let memory_gauge = Gauge::default()
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Context Window Memory Budget "),
-        )
-        .gauge_style(
-            Style::default()
-                .fg(if percent > 80 {
-                    Color::Red
-                } else {
-                    Color::Green
-                })
-                .add_modifier(Modifier::BOLD),
-        )
-        .percent(percent)
-        .label(format!(
-            "{}% ({}/{} tokens)",
-            percent, state.current_tokens, state.max_context_tokens
-        ));
-    frame.render_widget(memory_gauge, chunks[1]);
+    out.extend(bordered_panel(
+        "Context Window Memory Budget",
+        &context_gauge(percent, state.current_tokens, state.max_context_tokens, width.saturating_sub(4)),
+        width,
+    ));
 
-    // 3. Body View
+    // 3. Body: assistant output + logs
     let body_text = if state.assistant_text.is_empty() {
         state.logs.join("\n")
     } else {
         format!("{}\n\n--- Logs ---\n{}", state.assistant_text, state.logs.join("\n"))
     };
     let body_title = match state.view_mode {
-        ViewMode::Agent => " Assistant & Tool Execution Stream ",
-        ViewMode::TerminalShell => " Terminal Shell Output Stream ",
+        ViewMode::Agent => "Assistant & Tool Execution Stream",
+        ViewMode::TerminalShell => "Terminal Shell Output Stream",
     };
-    let body = Paragraph::new(body_text).block(Block::default().borders(Borders::ALL).title(body_title));
-    frame.render_widget(body, chunks[2]);
+    out.extend(bordered_panel(body_title, &body_text, width));
 
-    // 4. Input & Slash Menu Box
+    // 4. Input box (and slash-command suggestions, if any)
     let input_title = if state.slash_suggestions.is_empty() {
-        " Input Prompt (Type / for Slash Commands) "
+        "Input Prompt (Type / for Slash Commands)"
     } else {
-        " Slash Commands Autocomplete Menu "
+        "Slash Commands Autocomplete Menu"
     };
     let input_display = if state.slash_suggestions.is_empty() {
-        state.input_buffer.clone()
+        format!("{ANSI_YELLOW}{}{ANSI_RESET}", state.input_buffer)
     } else {
         format!(
-            "{}\nSuggestions:\n{}",
+            "{ANSI_YELLOW}{}{ANSI_RESET}\nSuggestions:\n{}",
             state.input_buffer,
             state.slash_suggestions.join(" | ")
         )
     };
-    let input_box = Paragraph::new(input_display).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(input_title)
-            .style(Style::default().fg(Color::Yellow)),
-    );
-    frame.render_widget(input_box, chunks[3]);
+    out.extend(bordered_panel(input_title, &input_display, width));
 
     // 5. Status line — model, workspace, branch, context, permission mode.
-    crate::statusline::render(frame, chunks[4], state, &state.statusline);
+    out.extend(crate::statusline::render(state, &state.statusline, width));
+
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ink::utils::{strip_ansi, visible_width};
+
+    #[test]
+    fn renders_every_panel_at_a_reasonable_width() {
+        let state = TuiState::default();
+        let lines = render(&state, 80);
+        let text = strip_ansi(&lines.join("\n"));
+        assert!(text.contains("Header Dashboard"));
+        assert!(text.contains("Context Window Memory Budget"));
+        assert!(text.contains("Input Prompt"));
+    }
+
+    #[test]
+    fn every_row_fits_inside_the_requested_width() {
+        let state = TuiState::default();
+        for width in [30usize, 50, 80, 120] {
+            for line in render(&state, width) {
+                assert!(
+                    visible_width(&line) <= width,
+                    "row wider than {width}: {line:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn banner_shows_on_a_fresh_session_and_disappears_after_dismissal() {
+        let mut state = TuiState::default();
+        let with_banner = strip_ansi(&render(&state, 80).join("\n"));
+        assert!(with_banner.contains("Welcome"));
+
+        state.show_banner = false;
+        let without = strip_ansi(&render(&state, 80).join("\n"));
+        assert!(!without.contains("Welcome"));
+        assert!(without.contains("Header Dashboard"));
+    }
+
+    #[test]
+    fn permission_footer_reflects_the_current_mode() {
+        let mut state = TuiState::default();
+        let ask = strip_ansi(&render(&state, 80).join("\n"));
+        assert!(
+            ask.contains("shift+tab to cycle"),
+            "default mode footer missing:\n{ask}"
+        );
+
+        state.cycle_permission_mode();
+        state.cycle_permission_mode();
+        let bypass = strip_ansi(&render(&state, 80).join("\n"));
+        assert!(bypass.contains("bypass permissions"), "{bypass}");
+    }
 }

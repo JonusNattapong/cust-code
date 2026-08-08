@@ -384,16 +384,27 @@ bookkeeping — none on the path to a working permission prompt or menu.
 
 **Verified:** 15 markdown tests + 9 autocomplete tests; workspace green, clippy clean.
 
-#### 37e — Migrate the surface off ratatui
+#### 37e — Migrate the surface off ratatui ✅
 
-`banner`, `statusline`, `ui`, and `runtime` rebuilt as `ink` components; `ui.rs`'s six-pane
-`Layout` becomes a `Container`. Then `ratatui` leaves `cust-tui/Cargo.toml`.
+`banner::render`, `statusline::render`, and `ui::render` no longer take a ratatui `Frame` —
+they return `Vec<String>` (ANSI-styled rows) built from `ink::components::{BoxView, Text}`,
+composed the same top-to-bottom order the six-pane `Layout` used (banner, header, context
+gauge, body, input box, status line). `runtime::run` replaced the ratatui
+`Terminal<CrosstermBackend>` + alternate-screen guard with `ink::{Differ, ProcessTerminal}`
+driven directly (not through the full `Tui`/focus/overlay machinery, which this surface
+doesn't need yet) — only rows that changed between frames get rewritten, and quitting leaves
+the transcript in scrollback instead of discarding it. `runtime`'s `tokio::select!` loop,
+`map_key`, and the `!`-prefixed shell passthrough (`run_shell_command`) were untouched by the
+migration. `ratatui` is out of `cust-tui/Cargo.toml` and gone from `Cargo.lock`.
 
-`runtime`'s `tokio::select!` loop and `map_key` survive — only the draw call and the
-alternate-screen guard change. `crossterm` stays for raw mode, size, and the event stream.
+One real bug the migration surfaced: `statusline::render` padded its row to width without
+ever clipping it, so a narrow terminal produced a line wider than requested — the differ
+assumes every row respects the width it was given. Fixed by truncating with an ellipsis
+before padding, same as every other row-producing component.
 
-**Smoke test for the phase:** run `cust`, hold a conversation with a tool call and a long
-diff in it, quit, and confirm the whole transcript is still scrollable in the terminal.
+**Verified:** 192 cumulative `cust-tui` tests (banner/statusline/ui/runtime rewritten to
+assert on returned lines instead of a ratatui `TestBackend` buffer), full workspace builds
+and tests clean, clippy clean, zero `ratatui` references outside historical doc comments.
 
 #### 37f — Live status line during streaming ✅
 

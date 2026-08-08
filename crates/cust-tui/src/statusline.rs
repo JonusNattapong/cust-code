@@ -5,13 +5,7 @@
 
 use crate::app::TuiState;
 use crate::permission::PermissionMode;
-use ratatui::{
-    Frame,
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::Paragraph,
-};
+use crate::ink::utils::truncate_to_width;
 
 /// Which segments the status line shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,48 +135,69 @@ pub fn render_text(state: &TuiState, config: &StatusLineConfig) -> String {
     parts.join("  ·  ")
 }
 
-/// Draw the status line into a single-row `area`.
-pub fn render(frame: &mut Frame<'_>, area: Rect, state: &TuiState, config: &StatusLineConfig) {
+const ANSI_RESET: &str = "\u{1b}[0m";
+const ANSI_BOLD: &str = "\u{1b}[1m";
+const ANSI_RED: &str = "\u{1b}[31m";
+const ANSI_GREEN: &str = "\u{1b}[32m";
+const ANSI_YELLOW: &str = "\u{1b}[33m";
+const ANSI_BLUE: &str = "\u{1b}[34m";
+const ANSI_MAGENTA: &str = "\u{1b}[35m";
+const ANSI_CYAN: &str = "\u{1b}[36m";
+const ANSI_DARK_GRAY: &str = "\u{1b}[90m";
+
+/// Render the status line as one ANSI-styled row, padded to `width`.
+///
+/// An empty vec means the line is disabled — callers should reserve zero rows
+/// for it, matching the old ratatui layout where a hidden statusline took no
+/// space.
+pub fn render(state: &TuiState, config: &StatusLineConfig, width: usize) -> Vec<String> {
     if !config.enabled {
-        return;
+        return Vec::new();
     }
 
-    let mut spans: Vec<Span<'_>> = Vec::new();
-    let mut push = |text: String, color: Color| {
-        if !spans.is_empty() {
-            spans.push(Span::styled("  ·  ", Style::default().fg(Color::DarkGray)));
+    let mut line = String::new();
+    let push = |line: &mut String, text: String, color: &str| {
+        if !line.is_empty() {
+            line.push_str(ANSI_DARK_GRAY);
+            line.push_str("  \u{b7}  ");
+            line.push_str(ANSI_RESET);
         }
-        spans.push(Span::styled(
-            text,
-            Style::default().fg(color).add_modifier(Modifier::BOLD),
-        ));
+        line.push_str(color);
+        line.push_str(ANSI_BOLD);
+        line.push_str(&text);
+        line.push_str(ANSI_RESET);
     };
 
     if config.model {
-        push(format!("✦ {}", state.active_model), Color::Magenta);
+        push(&mut line, format!("\u{2726} {}", state.active_model), ANSI_MAGENTA);
     }
     if config.workspace {
-        push(format!("▪ {}", state.workspace), Color::Cyan);
+        push(&mut line, format!("\u{25aa} {}", state.workspace), ANSI_CYAN);
     }
-    if config.branch && let Some(branch) = &state.git_branch {
-        push(format!("⑂ {branch}"), Color::Blue);
+    if config.branch {
+        if let Some(branch) = &state.git_branch {
+            push(&mut line, format!("\u{2442} {branch}"), ANSI_BLUE);
+        }
     }
     if config.context {
         let percent = state.memory_percent();
-        let color = if percent > 80 { Color::Red } else { Color::Green };
-        push(format!("ctx {percent}%"), color);
+        let color = if percent > 80 { ANSI_RED } else { ANSI_GREEN };
+        push(&mut line, format!("ctx {percent}%"), color);
     }
     if config.permission {
         let mode = state.permission_mode.get();
         let color = match mode {
-            PermissionMode::BypassPermissions => Color::Red,
-            PermissionMode::AcceptEdits => Color::Yellow,
-            PermissionMode::Ask | PermissionMode::Plan => Color::DarkGray,
+            PermissionMode::BypassPermissions => ANSI_RED,
+            PermissionMode::AcceptEdits => ANSI_YELLOW,
+            PermissionMode::Ask | PermissionMode::Plan => ANSI_DARK_GRAY,
         };
-        push(mode.footer(), color);
+        push(&mut line, mode.footer(), color);
     }
 
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+    // A narrow terminal gets a clipped-with-ellipsis line rather than one
+    // that overflows the requested width — the caller's differ assumes every
+    // row respects it.
+    vec![truncate_to_width(&line, width, Some("\u{2026}")).text]
 }
 
 #[cfg(test)]
