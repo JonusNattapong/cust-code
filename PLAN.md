@@ -381,6 +381,20 @@ alternate-screen guard change. `crossterm` stays for raw mode, size, and the eve
 **Smoke test for the phase:** run `cust`, hold a conversation with a tool call and a long
 diff in it, quit, and confirm the whole transcript is still scrollable in the terminal.
 
+#### 37f — Live status line during streaming ✅
+
+`components::StatusLine` — a single-row component that shows:
+- Animated spinner (braille frames)
+- Elapsed time (formatted as `2m 45s`)
+- Token count this turn (formatted with `k` suffix above 1000)
+- Shimmer gradient (ANSI 256-color, shifts every frame for visual feedback)
+
+The shimmer repaints this row on every render cycle but the differ keeps it cheap — only
+that single row changes. The component holds no timer or external state; the caller drives
+the animation by calling `tick()` once per frame and updating token count.
+
+**Verified:** 6 tests; 126 cumulative ink tests pass; clippy clean.
+
 #### Deferred within 37
 
 `fullscreen.ts` (alternate-screen viewport), the Kitty/iTerm2 image protocols, and

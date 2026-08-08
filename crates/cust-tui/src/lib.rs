@@ -13,6 +13,6 @@ pub use runtime::{KeyAction, map_key, run};
 pub use statusline::{StatusLineConfig, StatusLineUpdate};
 pub use ink::{
     BoxView, Component, Container, Differ, FrameKind, InkColor, InkNode, InkRenderer, Key, KeyCode,
-    Loader, SelectItem, SelectList, Spacer, Terminal, Text as InkText, TruncatedText, Tui,
+    Loader, SelectItem, SelectList, Spacer, StatusLine, Terminal, Text as InkText, TruncatedText, Tui,
 };
 pub use ui::render;
