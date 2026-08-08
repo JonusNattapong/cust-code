@@ -13,8 +13,8 @@ pub use runtime::{KeyAction, map_key, run};
 pub use statusline::{StatusLineConfig, StatusLineUpdate};
 pub use ink::{
     Autocomplete, AutocompleteItem, AutocompleteProvider, BoxView, CombinedAutocompleteProvider, Component,
-    Container, Differ, Editor, FilePathProvider, FrameKind, InkColor, InkNode, InkRenderer, Key, KeyCode,
-    Loader, Markdown, OverlayAnchor, OverlayOptions, SelectItem, SelectList, SlashCommandProvider, Spacer,
-    StatusLine, Terminal, Text as InkText, TruncatedText, Tui,
+    Container, Differ, Editor, EditorAutocomplete, FilePathProvider, FrameKind, InkColor, InkNode, InkRenderer,
+    Key, KeyCode, Loader, Markdown, OverlayAnchor, OverlayOptions, SelectItem, SelectList, SlashCommandProvider,
+    Spacer, StatusLine, Terminal, Text as InkText, TruncatedText, Tui,
 };
 pub use ui::render;

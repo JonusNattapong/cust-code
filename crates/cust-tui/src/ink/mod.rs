@@ -19,8 +19,8 @@
 //!
 //! # Not yet ported
 //!
-//! The alternate-screen fullscreen viewport, markdown rendering, autocomplete,
-//! terminal image protocols (Kitty/iTerm2), and LaTeX-to-Unicode.
+//! The alternate-screen fullscreen viewport, terminal image protocols
+//! (Kitty/iTerm2), and LaTeX-to-Unicode.
 
 pub mod autocomplete;
 pub mod component;
@@ -36,8 +36,8 @@ pub mod tui;
 pub mod utils;
 
 pub use autocomplete::{
-    Autocomplete, AutocompleteItem, AutocompleteProvider, CombinedAutocompleteProvider, FilePathProvider,
-    SlashCommandProvider,
+    Autocomplete, AutocompleteItem, AutocompleteProvider, CombinedAutocompleteProvider, EditorAutocomplete,
+    FilePathProvider, SlashCommandProvider,
 };
 pub use component::{Component, Container, CURSOR_MARKER};
 pub use components::{

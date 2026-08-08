@@ -5,11 +5,12 @@
 //! [`crate::ink::fuzzy`] ranks the candidates. Rendered as a small overlay
 //! panel via [`crate::ink::components::SelectList`]-style rows.
 //!
-//! Deferred from the full port: async providers, result caching keyed by
-//! query prefix, and the editor-side trigger detection (deciding *when* to
-//! open the popup as the user types) — this module is the ranking and
-//! rendering half; wiring it to live cursor position is future work.
+//! Deferred from the full port: async providers and result caching keyed by
+//! query prefix. Editor-side trigger detection lives on
+//! [`crate::ink::components::Editor::completion_trigger`]; [`EditorAutocomplete`]
+//! below wires it to this module's ranking and rendering.
 
+use crate::ink::components::Editor;
 use crate::ink::fuzzy::fuzzy_filter_scored;
 use crate::ink::utils::{pad_to_width, truncate_to_width, visible_width};
 use crate::ink::Component;
@@ -270,6 +271,120 @@ impl Component for Autocomplete {
     }
 }
 
+/// A text [`Editor`] with a completion popup wired to its trigger detection.
+///
+/// Every keystroke first updates the editor, then re-checks
+/// [`Editor::completion_trigger`]: a trigger opens or refreshes the popup for
+/// its query, and losing the trigger (whitespace, deleting past it) closes
+/// it. While open, navigation keys (up/down/enter/escape) drive the popup
+/// instead of the editor; everything else — typing, backspace — still goes
+/// to the editor so the query stays live.
+pub struct EditorAutocomplete {
+    editor: Editor,
+    providers: CombinedAutocompleteProvider,
+    popup: Option<(char, Autocomplete)>,
+}
+
+impl EditorAutocomplete {
+    pub fn new(providers: CombinedAutocompleteProvider) -> Self {
+        Self {
+            editor: Editor::new(),
+            providers,
+            popup: None,
+        }
+    }
+
+    pub fn editor(&self) -> &Editor {
+        &self.editor
+    }
+
+    pub fn is_popup_open(&self) -> bool {
+        self.popup.is_some()
+    }
+
+    /// Re-derive popup open/closed state and its filtered items from the
+    /// editor's current trigger token. Called after every edit.
+    fn sync_popup(&mut self) {
+        let triggers = self.providers.triggers();
+        match self.editor.completion_trigger(&triggers) {
+            Some((trigger, query)) => {
+                match &mut self.popup {
+                    Some((active_trigger, popup)) if *active_trigger == trigger => {
+                        popup.set_query(query);
+                    }
+                    _ => {
+                        let mut popup = Autocomplete::new(self.providers.items_for(trigger));
+                        popup.set_query(query);
+                        self.popup = Some((trigger, popup));
+                    }
+                }
+                if !self.popup.as_ref().unwrap().1.has_matches() {
+                    self.popup = None;
+                }
+            }
+            None => self.popup = None,
+        }
+    }
+}
+
+impl Component for EditorAutocomplete {
+    fn render(&mut self, width: usize) -> Vec<String> {
+        let mut out = self.editor.render(width);
+        if let Some((_, popup)) = &mut self.popup {
+            out.extend(popup.render(width));
+        }
+        out
+    }
+
+    fn invalidate(&mut self) {
+        self.editor.invalidate();
+        if let Some((_, popup)) = &mut self.popup {
+            popup.invalidate();
+        }
+    }
+
+    fn handle_input(&mut self, data: &str) {
+        use crate::ink::keys::{parse_keys, KeyCode};
+
+        for key in parse_keys(data) {
+            if key.is_release() {
+                continue;
+            }
+
+            let Some((trigger, popup)) = &mut self.popup else {
+                self.editor.handle_input(&key.raw);
+                self.sync_popup();
+                continue;
+            };
+
+            match key.code {
+                KeyCode::Up | KeyCode::Down => popup.handle_input(&key.raw),
+                KeyCode::Enter => {
+                    let trigger = *trigger;
+                    popup.handle_input(&key.raw);
+                    if let Some(value) = popup.take_submitted() {
+                        self.editor.replace_completion_trigger(trigger, &value);
+                    }
+                    self.popup = None;
+                }
+                KeyCode::Escape => self.popup = None,
+                _ => {
+                    self.editor.handle_input(&key.raw);
+                    self.sync_popup();
+                }
+            }
+        }
+    }
+
+    fn is_focusable(&self) -> bool {
+        true
+    }
+
+    fn set_focused(&mut self, focused: bool) {
+        self.editor.set_focused(focused);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -359,5 +474,80 @@ mod tests {
         let items = p.items();
         assert_eq!(items[0].value, "src/lib.rs");
         assert_eq!(items[0].label, "src/lib.rs");
+    }
+
+    fn combined_provider() -> CombinedAutocompleteProvider {
+        let mut combined = CombinedAutocompleteProvider::new();
+        combined.register(Box::new(SlashCommandProvider::new(vec![
+            AutocompleteItem::new("/help", "help"),
+            AutocompleteItem::new("/resume", "resume"),
+        ])));
+        combined.register(Box::new(FilePathProvider::new(vec!["src/lib.rs".to_string()])));
+        combined
+    }
+
+    #[test]
+    fn typing_a_trigger_opens_the_popup() {
+        let mut ea = EditorAutocomplete::new(combined_provider());
+        assert!(!ea.is_popup_open());
+        ea.handle_input("/re");
+        assert!(ea.is_popup_open());
+        assert_eq!(ea.editor.text(), "/re");
+    }
+
+    #[test]
+    fn plain_typing_never_opens_the_popup() {
+        let mut ea = EditorAutocomplete::new(combined_provider());
+        ea.handle_input("hello world");
+        assert!(!ea.is_popup_open());
+        assert_eq!(ea.editor.text(), "hello world");
+    }
+
+    #[test]
+    fn whitespace_closes_the_popup() {
+        let mut ea = EditorAutocomplete::new(combined_provider());
+        ea.handle_input("/re");
+        assert!(ea.is_popup_open());
+        ea.handle_input(" ");
+        assert!(!ea.is_popup_open());
+    }
+
+    #[test]
+    fn escape_dismisses_without_touching_the_editor() {
+        let mut ea = EditorAutocomplete::new(combined_provider());
+        ea.handle_input("/re");
+        ea.handle_input("\u{1b}");
+        assert!(!ea.is_popup_open());
+        assert_eq!(ea.editor.text(), "/re");
+    }
+
+    #[test]
+    fn enter_commits_the_selected_completion_into_the_editor() {
+        let mut ea = EditorAutocomplete::new(combined_provider());
+        ea.handle_input("/re");
+        assert!(ea.is_popup_open());
+        ea.handle_input("\r");
+        assert!(!ea.is_popup_open());
+        assert_eq!(ea.editor.text(), "/resume");
+    }
+
+    #[test]
+    fn arrow_keys_navigate_the_popup_instead_of_moving_the_cursor() {
+        let mut ea = EditorAutocomplete::new(combined_provider());
+        ea.handle_input("/"); // matches both /help and /resume
+        let before = ea.editor.cursor();
+        ea.handle_input("\u{1b}[B"); // Down
+        assert_eq!(ea.editor.cursor(), before, "cursor shouldn't move while popup is open");
+        ea.handle_input("\r");
+        assert_eq!(ea.editor.text(), "/resume");
+    }
+
+    #[test]
+    fn switching_trigger_characters_swaps_the_provider() {
+        let mut ea = EditorAutocomplete::new(combined_provider());
+        ea.handle_input("hi @lib");
+        assert!(ea.is_popup_open());
+        ea.handle_input("\r");
+        assert_eq!(ea.editor.text(), "hi src/lib.rs");
     }
 }

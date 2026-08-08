@@ -165,6 +165,50 @@ impl Editor {
         self.lines = vec![String::new()];
         self.cursor = CursorPos { line: 0, col: 0 };
     }
+
+    /// If the cursor sits inside a token opened by one of `triggers` (e.g.
+    /// `/` for slash commands, `@` for file mentions), return that trigger
+    /// character and the query text typed after it.
+    ///
+    /// A token only counts as active when the trigger is at the start of the
+    /// line or preceded by whitespace, and there's no whitespace between the
+    /// trigger and the cursor — matching where a completion popup should
+    /// stay open versus dismiss.
+    pub fn completion_trigger(&self, triggers: &[char]) -> Option<(char, String)> {
+        let line = &self.lines[self.cursor.line];
+        let before_cursor = &line[..self.cursor.col];
+
+        let (trigger_byte_idx, trigger_char) = before_cursor
+            .char_indices()
+            .rev()
+            .find(|(idx, ch)| {
+                triggers.contains(ch)
+                    && before_cursor[..*idx]
+                        .chars()
+                        .last()
+                        .map(|c| c.is_whitespace())
+                        .unwrap_or(true)
+            })?;
+
+        let query = &before_cursor[trigger_byte_idx + trigger_char.len_utf8()..];
+        if query.chars().any(|c| c.is_whitespace()) {
+            return None;
+        }
+        Some((trigger_char, query.to_string()))
+    }
+
+    /// Replace the active trigger token (trigger char + query up to the
+    /// cursor) with `value`, leaving the cursor right after it.
+    pub fn replace_completion_trigger(&mut self, trigger: char, value: &str) {
+        let Some((_, query)) = self.completion_trigger(&[trigger]) else {
+            return;
+        };
+        let token_len = trigger.len_utf8() + query.len();
+        let start = self.cursor.col - token_len;
+        let line = &mut self.lines[self.cursor.line];
+        line.replace_range(start..self.cursor.col, value);
+        self.cursor.col = start + value.len();
+    }
 }
 
 impl Default for Editor {
@@ -193,6 +237,29 @@ impl Component for Editor {
         }
 
         out
+    }
+
+    fn handle_input(&mut self, data: &str) {
+        use crate::ink::keys::{parse_keys, KeyCode};
+        for key in parse_keys(data) {
+            if key.is_release() {
+                continue;
+            }
+            match key.code {
+                KeyCode::Char(ch) => self.insert_char(ch),
+                KeyCode::Enter => self.insert_char('\n'),
+                KeyCode::Backspace => self.backspace(),
+                KeyCode::Left => self.move_left(),
+                KeyCode::Right => self.move_right(),
+                KeyCode::Home => self.move_home(),
+                KeyCode::End => self.move_end(),
+                _ => {}
+            }
+        }
+    }
+
+    fn is_focusable(&self) -> bool {
+        true
     }
 }
 
@@ -254,5 +321,57 @@ mod tests {
         assert_eq!(e.cursor().col, 2);
         e.move_right();
         assert_eq!(e.cursor().col, 3);
+    }
+
+    #[test]
+    fn handle_input_types_like_a_keyboard() {
+        let mut e = Editor::new();
+        e.handle_input("hi");
+        assert_eq!(e.text(), "hi");
+        e.handle_input("\u{7f}"); // backspace
+        assert_eq!(e.text(), "h");
+    }
+
+    #[test]
+    fn completion_trigger_detects_slash_at_line_start() {
+        let mut e = Editor::new();
+        e.handle_input("/res");
+        assert_eq!(
+            e.completion_trigger(&['/', '@']),
+            Some(('/', "res".to_string()))
+        );
+    }
+
+    #[test]
+    fn completion_trigger_detects_mention_after_whitespace() {
+        let mut e = Editor::new();
+        e.handle_input("look at @src/lib");
+        assert_eq!(
+            e.completion_trigger(&['/', '@']),
+            Some(('@', "src/lib".to_string()))
+        );
+    }
+
+    #[test]
+    fn completion_trigger_is_none_once_whitespace_closes_the_token() {
+        let mut e = Editor::new();
+        e.handle_input("/resume done");
+        assert_eq!(e.completion_trigger(&['/', '@']), None);
+    }
+
+    #[test]
+    fn completion_trigger_ignores_mid_word_symbols() {
+        let mut e = Editor::new();
+        e.handle_input("a/b");
+        assert_eq!(e.completion_trigger(&['/', '@']), None);
+    }
+
+    #[test]
+    fn replace_completion_trigger_swaps_the_active_token() {
+        let mut e = Editor::new();
+        e.handle_input("/res");
+        e.replace_completion_trigger('/', "/resume");
+        assert_eq!(e.text(), "/resume");
+        assert_eq!(e.cursor().col, "/resume".len());
     }
 }
