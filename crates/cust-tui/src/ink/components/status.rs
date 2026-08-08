@@ -84,13 +84,11 @@ impl StatusLine {
         // We approximate it with ANSI color codes: 238 (dark), 250 (bright), back to 238.
         let gradient = [238, 239, 240, 250, 251, 252, 250, 240, 239, 238];
         let mut out = String::new();
-        let mut col = 0;
-        for c in line.chars() {
+        for (col, c) in line.chars().enumerate() {
             let idx = (col + offset) % (gradient.len() * 4);
             let shade_idx = idx / 4; // Each shade lasts ~4 columns
             let code = gradient[shade_idx % gradient.len()];
             out.push_str(&format!("\u{1b}[38;5;{}m{}\u{1b}[0m", code, c));
-            col += 1;
         }
         out
     }

@@ -19,9 +19,8 @@
 //!
 //! # Not yet ported
 //!
-//! Overlays, the alternate-screen fullscreen viewport, the multi-line editor,
-//! markdown rendering, autocomplete, terminal image protocols (Kitty/iTerm2),
-//! and LaTeX-to-Unicode. The pieces below are the foundation those build on.
+//! The alternate-screen fullscreen viewport, markdown rendering, autocomplete,
+//! terminal image protocols (Kitty/iTerm2), and LaTeX-to-Unicode.
 
 pub mod component;
 pub mod components;
@@ -29,6 +28,7 @@ pub mod differ;
 pub mod fuzzy;
 pub mod keys;
 pub mod legacy;
+pub mod overlay;
 pub mod render_cache;
 pub mod terminal;
 pub mod tui;
@@ -39,6 +39,7 @@ pub use components::{BoxView, Editor, Loader, SelectItem, SelectList, Spacer, St
 pub use differ::{CursorPos, Differ, Frame, FrameKind, FullRedrawReason};
 pub use fuzzy::{fuzzy_filter, fuzzy_filter_scored, fuzzy_match, FuzzyMatch, ScoredItem};
 pub use keys::{parse_key, parse_keys, Key, KeyCode, KeyEventType, Modifiers};
+pub use overlay::{OverlayAnchor, OverlayId, OverlayMargin, OverlayOptions, OverlayStack, SizeValue};
 pub use render_cache::VersionedRenderCache;
 pub use terminal::{ProcessTerminal, Terminal, TerminalStopOptions, TestTerminal};
 pub use tui::Tui;
