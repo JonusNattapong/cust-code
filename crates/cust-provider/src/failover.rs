@@ -1,4 +1,4 @@
-use crate::{ProviderClient, TextStream};
+use crate::{Message, ProviderClient, TextStream};
 use futures_util::StreamExt;
 use std::pin::Pin;
 
@@ -12,9 +12,9 @@ impl ProviderFailoverGroup {
         Self { primary, fallbacks }
     }
 
-    pub async fn stream_chat_with_failover(&self, prompt: &str) -> Result<TextStream, anyhow::Error> {
+    pub async fn stream_chat_with_failover(&self, messages: Vec<Message>) -> Result<TextStream, anyhow::Error> {
         // 1. Attempt primary provider
-        let primary_stream = self.primary.stream_chat(prompt);
+        let primary_stream = self.primary.stream_chat(messages.clone());
         let mut peekable = primary_stream.peekable();
 
         // Peek first item to check if primary stream returns an immediate error
@@ -28,7 +28,7 @@ impl ProviderFailoverGroup {
 
         // 2. Failover to secondary fallbacks if primary failed
         for fallback in &self.fallbacks {
-            let fb_stream = fallback.stream_chat(prompt);
+            let fb_stream = fallback.stream_chat(messages.clone());
             let mut fb_peekable = fb_stream.peekable();
             if let Some(item) = Pin::new(&mut fb_peekable).peek().await {
                 if item.is_ok() {
@@ -40,6 +40,6 @@ impl ProviderFailoverGroup {
         }
 
         // If all fallbacks failed, return primary stream
-        Ok(self.primary.stream_chat(prompt))
+        Ok(self.primary.stream_chat(messages))
     }
 }

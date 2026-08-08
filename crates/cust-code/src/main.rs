@@ -159,7 +159,7 @@ async fn handle_ask(args: &[String]) -> Result<(), anyhow::Error> {
     let config = ConfigLoader::load(parsed.config)?;
 
     let client = cust_provider::ProviderClient::from_config(&config)?;
-    let mut stream = client.stream_chat(&prompt);
+    let mut stream = client.stream_chat_prompt(&prompt);
 
     let mut stdout = std::io::stdout();
     let mut received_any = false;

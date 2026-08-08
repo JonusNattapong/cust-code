@@ -1,4 +1,5 @@
 pub mod anthropic;
+pub mod message;
 pub mod capabilities;
 pub mod failover;
 pub mod generation;
@@ -9,6 +10,7 @@ pub use capabilities::{ProviderCapabilities, RemoteCompactionSupport};
 pub use failover::ProviderFailoverGroup;
 pub use generation::{GenerationManager, ModelGeneration};
 pub use openai::OpenAIProvider;
+pub use message::{ContentBlock, Message, Role};
 
 use cust_config_types::{Config, ModelCapabilities};
 use futures_util::Stream;
@@ -102,10 +104,15 @@ impl ProviderClient {
         }
     }
 
-    pub fn stream_chat(&self, prompt: &str) -> TextStream {
+    pub fn stream_chat(&self, messages: Vec<Message>) -> TextStream {
         match self {
-            Self::OpenAI(p) => p.stream_chat(prompt),
-            Self::Anthropic(p) => p.stream_chat(prompt),
+            Self::OpenAI(p) => p.stream_chat(messages),
+            Self::Anthropic(p) => p.stream_chat(messages),
         }
+    }
+
+    /// Convenience: create a user message from a string prompt.
+    pub fn stream_chat_prompt(&self, prompt: &str) -> TextStream {
+        self.stream_chat(vec![Message::user(prompt)])
     }
 }

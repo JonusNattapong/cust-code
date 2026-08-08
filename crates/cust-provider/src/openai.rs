@@ -1,7 +1,8 @@
+use crate::message::{ContentBlock, Message};
 use cust_config_types::ModelCapabilities;
 use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::pin::Pin;
 
 pub struct OpenAIProvider {
@@ -32,20 +33,54 @@ impl OpenAIProvider {
 
     pub fn stream_chat(
         &self,
-        prompt: &str,
+        messages: Vec<Message>,
     ) -> Pin<Box<dyn futures_util::Stream<Item = Result<String, anyhow::Error>> + Send>> {
         let client = reqwest::Client::new();
         let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
         let api_key = self.api_key.clone();
         let model = self.model.clone();
-        let prompt = prompt.to_string();
 
         let stream = async_stream::stream! {
-            let body = serde_json::json!({
+            // Convert messages to OpenAI format
+            let messages_value: Vec<Value> = messages
+                .into_iter()
+                .map(|msg| {
+                    let role = match msg.role {
+                        crate::message::Role::User => "user",
+                        crate::message::Role::Assistant => "assistant",
+                    };
+                    // OpenAI expects an array of content objects
+                    let content: Vec<Value> = msg
+                        .content
+                        .into_iter()
+                        .map(|block| match block {
+                            ContentBlock::Text(text) => json!({
+                                "type": "text",
+                                "text": text
+                            }),
+                            ContentBlock::Image { media_type, data } => {
+                                // OpenAI uses data: URIs for images
+                                let data_uri = format!("data:{};base64,{}", media_type, data);
+                                json!({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": data_uri,
+                                        "detail": "auto"
+                                    }
+                                })
+                            }
+                        })
+                        .collect();
+                    json!({
+                        "role": role,
+                        "content": content
+                    })
+                })
+                .collect();
+
+            let body = json!({
                 "model": model,
-                "messages": [
-                    { "role": "user", "content": prompt }
-                ],
+                "messages": messages_value,
                 "stream": true
             });
 

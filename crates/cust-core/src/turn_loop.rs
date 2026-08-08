@@ -89,7 +89,7 @@ impl AgentLoop {
                 }
             };
 
-            let mut text_stream = client.stream_chat(&full_prompt);
+            let mut text_stream = client.stream_chat_prompt(&full_prompt);
             let mut accumulated_text = String::new();
 
             while let Some(chunk_res) = text_stream.next().await {
