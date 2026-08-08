@@ -316,6 +316,77 @@ The headline feature. See DESIGN-NOTES for why four independent teams landed her
 1. `statusline` unit tests verified toggle parsing, aliases, usage errors leaving config untouched, and segment-gated text rendering.
 2. `slash_ui_test` verified local handling of `/statusline`, `/permissions`, `/status`, `/clear`, `/help`, `/quit`, `/init` prompt expansion, and plain-text passthrough.
 
+### Phase 37 — Inline rendering: `ink` replaces ratatui (`cust-tui`) 🔵 designing
+
+**Decision:** `cust-tui` renders **inline**, not in the alternate screen. `ink` (the pi-tui
+port, Phase 37a) becomes the only render stack and ratatui comes out.
+
+Why: the alternate screen throws the session away on exit. An agent transcript is the
+artifact — you scroll back to it, copy from it, pipe it. Inline differential rendering keeps
+every finished line in the terminal's own scrollback, where the terminal's search, selection,
+and mouse wheel already work, and repaints only the live tail. Fixed panes also fight long
+tool output: a 400-line diff inside a `Min(5)` pane is a scroll region nobody asked for.
+
+The cost is that everything ratatui gave for free — layout, borders, input editing — has to
+exist in `ink` first. That is what 37b–37d are.
+
+#### 37a — Core port ✅
+
+`ink::{utils, component, differ, terminal, tui, keys, fuzzy, render_cache}` plus
+`components::{Text, Spacer, BoxView, TruncatedText, Loader, SelectList}`. The diffing core
+takes no terminal I/O, so it is asserted on directly against `TestTerminal`.
+
+**Verified:** 142 tests; `cargo clippy` clean; whole workspace green.
+
+#### 37b — Editor (`ink::components::Editor`)
+
+The multi-line prompt input, and the piece everything else waits on. Port of pi-tui's
+`components/editor.ts` (~2.5k lines TS).
+
+- Grapheme-aware cursor movement, selection, and word motions — a cursor that steps by
+  `char` lands inside emoji and Thai clusters.
+- Undo/redo (`undo-stack.ts`) and an emacs kill-ring (`kill-ring.ts`).
+- Soft-wrapped logical lines: one input line may occupy several terminal rows, and the
+  cursor has to map between the two.
+- Bracketed paste, and a paste snapshot so a large paste collapses to `[pasted 340 lines]`
+  rather than flooding the transcript.
+- Emits `CURSOR_MARKER` at the caret so the hardware cursor — and therefore the IME
+  candidate window — lands in the right cell.
+
+#### 37c — Overlays (`ink::tui`)
+
+Anchored, sized, clipped panels composited over the base content before the diff runs, from
+the overlay half of pi-tui's `tui.ts`. This is what permission prompts, the model picker, and
+the slash menu are drawn as. Percentage or absolute sizing, nine anchor points, margins, and
+a focus stack so the topmost capturing overlay owns the keyboard.
+
+Overlays composite *into the frame*, so they cost no extra terminal round-trip and cannot
+tear against the content underneath.
+
+#### 37d — Markdown + autocomplete
+
+- `components/markdown.ts` — headings, lists, tables, and syntax-highlighted fenced code.
+  Assistant output is markdown; today it renders as raw text.
+- `autocomplete.ts` — the completion popup over `ink::fuzzy`, with providers for slash
+  commands, `@file` paths, and skills. Drawn as an overlay from 37c.
+
+#### 37e — Migrate the surface off ratatui
+
+`banner`, `statusline`, `ui`, and `runtime` rebuilt as `ink` components; `ui.rs`'s six-pane
+`Layout` becomes a `Container`. Then `ratatui` leaves `cust-tui/Cargo.toml`.
+
+`runtime`'s `tokio::select!` loop and `map_key` survive — only the draw call and the
+alternate-screen guard change. `crossterm` stays for raw mode, size, and the event stream.
+
+**Smoke test for the phase:** run `cust`, hold a conversation with a tool call and a long
+diff in it, quit, and confirm the whole transcript is still scrollable in the terminal.
+
+#### Deferred within 37
+
+`fullscreen.ts` (alternate-screen viewport), the Kitty/iTerm2 image protocols, and
+`latex.ts`. Fullscreen only earns its place if we build a dedicated diff viewer; images and
+LaTeX are not on the path to a working prompt.
+
 ## Deliberately not in scope yet
 
 Skills, MCP client, hooks, memory, LSP, multi-provider fallback chains, voice, peers. Each

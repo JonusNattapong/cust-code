@@ -274,7 +274,7 @@ crates/
   cust-codemode     # QuickJS guest + host-tool bridge
   cust-session      # transcript store, leases, rewind, resume
   cust-proto        # ACP + daemon protocol types
-  cust-tui          # ratatui frontend
+  cust-tui          # inline differential frontend (`ink`, ported from pi-tui)
 ```
 
 Contracts to fix before anything else, since everything hangs off them:
@@ -297,3 +297,30 @@ Contracts to fix before anything else, since everything hangs off them:
    (MiMo)? This decides whether we need a typed host-request bridge on day one.
 4. ACP first, or a private protocol first with ACP adapted on top?
 5. Where does clew fit — is cust a rewrite, a companion, or unrelated?
+
+## Why inline rendering, not the alternate screen
+
+Settled at Phase 37, after `cust-tui` had spent Phases 7–36 on ratatui.
+
+The alternate screen is the wrong container for an agent. It is a fixed grid you paint and
+then discard: quit, and the terminal restores whatever was there before, taking the session
+with it. But the transcript *is* the product — it gets scrolled back to, copied out of, piped
+into something else. Anything that makes it ephemeral is working against the tool.
+
+Fixed panes fail the same way at a smaller scale. Tool output is unbounded — a 400-line diff,
+a stack trace, a directory listing — and a `Constraint::Min(5)` pane turns each one into its
+own little scroll region with its own keybindings, none of which are the terminal's.
+
+Inline differential rendering inverts it: finished lines are just terminal output, so
+scrollback, selection, search, and the mouse wheel are the terminal's job and already work.
+Only the live tail — the spinner, the streaming reply, the prompt — is repainted, and the
+differ repaints just the rows that changed.
+
+What we give up is the free layout engine. Borders, padding, input editing, and overlays all
+have to be built. pi-tui had already built them, which is why `ink` is a port of it rather
+than a design from scratch, and why the port order (editor → overlays → markdown) is exactly
+the order in which the missing pieces block a usable prompt.
+
+Overlays recover the one thing panes were genuinely good at: a modal that covers content
+without destroying it. They composite into the frame before diffing, so a permission prompt
+costs no extra terminal round-trip and cannot tear against the transcript behind it.
