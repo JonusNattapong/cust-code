@@ -12,6 +12,9 @@ fn info() -> BannerInfo {
         provider: "openai".to_string(),
         sandbox: SandboxStatus::ReadOnly,
         shortcuts: banner::DEFAULT_SHORTCUTS.to_vec(),
+        user_name: None,
+        workspace_path: None,
+        tips: banner::DEFAULT_TIPS.iter().map(|s| s.to_string()).collect(),
     }
 }
 
@@ -44,7 +47,12 @@ fn narrow_terminal_degrades_to_a_smaller_logo() {
     assert!(narrow.contains("code"), "missing wordmark:\n{narrow}");
     // The status line still gets through, just on more rows than the wide case.
     assert!(narrow.contains("v1.2.3"), "missing version:\n{narrow}");
-    assert!(render_banner_rows(100).len() < render_banner_rows(30).len());
+    // Below the two-column threshold, tips are dropped entirely rather than
+    // squeezed in — there isn't room to lay them out beside the logo.
+    assert!(
+        !narrow.contains("Tips for getting started"),
+        "narrow panel should not show the tips column:\n{narrow}"
+    );
 }
 
 #[test]

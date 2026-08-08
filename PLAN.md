@@ -406,6 +406,43 @@ before padding, same as every other row-producing component.
 assert on returned lines instead of a ratatui `TestBackend` buffer), full workspace builds
 and tests clean, clippy clean, zero `ratatui` references outside historical doc comments.
 
+### Phase 39 — Two-column welcome screen (`cust-tui`)
+
+Matches the Claude Code / Clew Code welcome layout: "Welcome back {name}!" + logo on the
+left, a "Tips for getting started" bullet list on the right, side by side inside the bordered
+panel. Below `content_width < 60` there isn't room for two columns of anything useful, so it
+collapses to the original single stacked column — same degradation strategy as the logo's own
+`LogoSize` breakpoints.
+
+- `ink::components::Columns` — lays children out side by side instead of `Container`'s
+  top-to-bottom stack. Equal split by default, or explicit weights (`[3, 2]` here). The
+  shorter column is padded with blank rows so every combined row spans the full width; a
+  ragged bottom edge would leave the taller column's right side unbounded.
+- `BannerInfo` gained `user_name`, `workspace_path`, and `tips` fields (all optional /
+  default-populated, so every existing caller still compiles unchanged). `cust-code`'s
+  `handle_tui` fills `user_name` from `$USERNAME`/`$USER` and `workspace_path` from the cwd.
+
+**A real pre-existing bug this surfaced:** `banner::render`'s content-width calculation only
+subtracted the border (`width - 2`), not the panel's own padding on top of it. The actual
+width `BoxView` hands its children is `width - 2*(padding_x + border_inset)` — 4, not 2, for
+a padded and bordered panel. Nothing had caught this because the old test suite exercised
+`render_text` (a separate, boxless, unaffected code path) but never rendered `render()`
+through `BoxView` and checked the result. Fixed by computing `content_width` once and passing
+it everywhere `render()` and `height_for()` need it, instead of each recomputing a
+slightly-different approximation.
+
+**`height_for` now delegates to `render(..).len()`** rather than hand-predicting row counts.
+It used to; the two-column layout's word-wrapped tips and status line made an accurate
+hand-rolled prediction mean reimplementing `wrap_text_with_ansi`'s line-breaking a second
+time — a duplicate implementation that would silently drift is a worse trade than the cost of
+rendering a few dozen short strings.
+
+**Verified:** 10 new banner tests (two-column layout, named-user greeting, custom tips,
+narrow-width fallback, `height_for`/`render` row-count equality) + 6 new `Columns` tests, 203
+cumulative `cust-tui` tests, full workspace clean, clippy clean. Manually confirmed via a
+headless `cust tui` run (piped stdin, killed after 3s) that the rendered ANSI output matches
+the intended layout byte-for-byte.
+
 #### 37f — Live status line during streaming ✅
 
 `components::StatusLine` — a single-row component that shows:

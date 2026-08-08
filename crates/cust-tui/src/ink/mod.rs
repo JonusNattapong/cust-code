@@ -41,7 +41,7 @@ pub use autocomplete::{
 };
 pub use component::{Component, Container, CURSOR_MARKER};
 pub use components::{
-    BoxView, Editor, Loader, Markdown, SelectItem, SelectList, Spacer, StatusLine, Text, TruncatedText,
+    BoxView, Columns, Editor, Loader, Markdown, SelectItem, SelectList, Spacer, StatusLine, Text, TruncatedText,
 };
 pub use differ::{CursorPos, Differ, Frame, FrameKind, FullRedrawReason};
 pub use fuzzy::{fuzzy_filter, fuzzy_filter_scored, fuzzy_match, FuzzyMatch, ScoredItem};

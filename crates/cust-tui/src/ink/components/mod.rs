@@ -4,6 +4,7 @@
 //! implementing [`crate::ink::Component`]: width in, lines out.
 
 mod boxed;
+mod columns;
 mod editor;
 mod loader;
 mod markdown;
@@ -14,6 +15,7 @@ mod text;
 mod truncated_text;
 
 pub use boxed::{BorderStyle, BoxView};
+pub use columns::Columns;
 pub use editor::Editor;
 pub use loader::Loader;
 pub use markdown::Markdown;

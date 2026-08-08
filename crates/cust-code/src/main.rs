@@ -278,7 +278,14 @@ async fn handle_tui(args: &[String]) -> Result<(), anyhow::Error> {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| cwd.display().to_string());
         state.git_branch = cust_core::GitTracker::fast_status(&cwd).branch;
+        state.banner.workspace_path = Some(cwd.display().to_string());
     }
+    // USERNAME on Windows, USER elsewhere; absent just falls back to a
+    // plain "Welcome" instead of "Welcome back {name}!".
+    state.banner.user_name = std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .ok()
+        .filter(|n| !n.trim().is_empty());
     state.set_session_info(
         config.provider.clone(),
         config.model.clone(),
