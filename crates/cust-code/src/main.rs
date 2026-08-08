@@ -14,6 +14,8 @@ usage:
   cust run \"<prompt>\"            run turn loop with tools
   cust ask \"<prompt>\"            single-shot prompt without tools
   cust tui                        interactive terminal UI
+  cust list                       list saved sessions
+  cust resume <id>                print a saved session's transcript
   cust banner                     print the welcome banner
   cust help                       show this message
   cust version                    print the version
@@ -110,6 +112,27 @@ async fn main() -> ExitCode {
                 }
                 Err(e) => {
                     eprintln!("Failed to list sessions: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        "resume" => {
+            let Some(id) = args.get(2) else {
+                eprintln!("usage: cust resume <id>");
+                return ExitCode::FAILURE;
+            };
+            let store = cust_session::SessionStore::new(cust_session::SessionStore::default_dir());
+            match store.load_session(id) {
+                Ok((meta, messages)) => {
+                    println!("Session [{}] {}", meta.id, meta.title);
+                    println!("({} messages)\n", messages.len());
+                    for msg in messages {
+                        println!("{}: {}", msg.role, msg.content);
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Failed to resume session '{id}': {e}");
                     ExitCode::FAILURE
                 }
             }

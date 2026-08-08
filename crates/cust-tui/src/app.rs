@@ -143,6 +143,44 @@ impl TuiState {
                 }
             }
             "quit" | "exit" => return SlashOutcome::Quit,
+            "resume" => {
+                if args.is_empty() {
+                    let store =
+                        cust_session::SessionStore::new(cust_session::SessionStore::default_dir());
+                    match store.list_sessions() {
+                        Ok(sessions) if sessions.is_empty() => {
+                            self.log_command("resume", "no saved sessions found".to_string());
+                        }
+                        Ok(sessions) => {
+                            self.log_command("resume", "usage: /resume <id>".to_string());
+                            for s in sessions {
+                                self.logs.push(format!("  - [{}] {}", s.id, s.title));
+                            }
+                        }
+                        Err(e) => {
+                            self.log_command("resume", format!("failed to list sessions: {e}"));
+                        }
+                    }
+                    return SlashOutcome::Consumed;
+                }
+                let store =
+                    cust_session::SessionStore::new(cust_session::SessionStore::default_dir());
+                match store.load_session(&args) {
+                    Ok((meta, messages)) => {
+                        self.log_command(
+                            "resume",
+                            format!("resumed '{}' ({} messages)", meta.title, messages.len()),
+                        );
+                        for msg in &messages {
+                            self.logs.push(format!("{}: {}", msg.role, msg.content));
+                        }
+                    }
+                    Err(e) => {
+                        self.log_command("resume", format!("failed to resume '{args}': {e}"));
+                    }
+                }
+                return SlashOutcome::Consumed;
+            }
             // Commands with a canned prompt, then anything unrecognised.
             _ => {
                 let prompt = self

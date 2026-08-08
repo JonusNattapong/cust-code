@@ -392,6 +392,7 @@ dependencies = [
  "anyhow",
  "crossterm",
  "cust-core",
+ "cust-session",
  "cust-tools-api",
  "futures-util",
  "ratatui",

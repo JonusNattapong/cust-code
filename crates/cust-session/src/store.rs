@@ -98,6 +98,29 @@ impl SessionStore {
         Ok(list)
     }
 
+    pub fn load_session(
+        &self,
+        id: &str,
+    ) -> Result<(SessionMetadata, Vec<SessionMessage>), anyhow::Error> {
+        let meta_path = self.base_dir.join(format!("{id}.meta.json"));
+        let meta_json = std::fs::read_to_string(&meta_path)
+            .map_err(|_| anyhow::anyhow!("no saved session with id '{id}'"))?;
+        let meta: SessionMetadata = serde_json::from_str(&meta_json)?;
+
+        let jsonl_path = self.base_dir.join(format!("{id}.jsonl"));
+        let mut messages = Vec::new();
+        if let Ok(content) = std::fs::read_to_string(&jsonl_path) {
+            for line in content.lines() {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                messages.push(serde_json::from_str::<SessionMessage>(line)?);
+            }
+        }
+
+        Ok((meta, messages))
+    }
+
     pub fn rewind_session(
         &self,
         id: &str,

@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 cust-core = { path = "../cust-core" }
 cust-tools-api = { path = "../cust-tools-api" }
+cust-session = { path = "../cust-session" }
 ratatui = "0.29"
 crossterm = { version = "0.28", features = ["event-stream"] }
 tokio = { version = "1.0", features = ["full"] }
