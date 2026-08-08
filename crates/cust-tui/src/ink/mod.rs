@@ -35,7 +35,7 @@ pub mod tui;
 pub mod utils;
 
 pub use component::{Component, Container, CURSOR_MARKER};
-pub use components::{BoxView, Loader, SelectItem, SelectList, Spacer, StatusLine, Text, TruncatedText};
+pub use components::{BoxView, Editor, Loader, SelectItem, SelectList, Spacer, StatusLine, Text, TruncatedText};
 pub use differ::{CursorPos, Differ, Frame, FrameKind, FullRedrawReason};
 pub use fuzzy::{fuzzy_filter, fuzzy_filter_scored, fuzzy_match, FuzzyMatch, ScoredItem};
 pub use keys::{parse_key, parse_keys, Key, KeyCode, KeyEventType, Modifiers};

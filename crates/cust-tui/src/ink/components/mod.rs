@@ -4,6 +4,7 @@
 //! implementing [`crate::ink::Component`]: width in, lines out.
 
 mod boxed;
+mod editor;
 mod loader;
 mod select_list;
 mod spacer;
@@ -12,6 +13,7 @@ mod text;
 mod truncated_text;
 
 pub use boxed::{BorderStyle, BoxView};
+pub use editor::Editor;
 pub use loader::Loader;
 pub use select_list::{SelectItem, SelectList};
 pub use spacer::Spacer;
