@@ -12,7 +12,9 @@ pub use permission::{PermissionMode, SharedPermissionMode};
 pub use runtime::{KeyAction, map_key, run};
 pub use statusline::{StatusLineConfig, StatusLineUpdate};
 pub use ink::{
-    BoxView, Component, Container, Differ, FrameKind, InkColor, InkNode, InkRenderer, Key, KeyCode,
-    Loader, SelectItem, SelectList, Spacer, StatusLine, Terminal, Text as InkText, TruncatedText, Tui,
+    Autocomplete, AutocompleteItem, AutocompleteProvider, BoxView, CombinedAutocompleteProvider, Component,
+    Container, Differ, Editor, FilePathProvider, FrameKind, InkColor, InkNode, InkRenderer, Key, KeyCode,
+    Loader, Markdown, OverlayAnchor, OverlayOptions, SelectItem, SelectList, SlashCommandProvider, Spacer,
+    StatusLine, Terminal, Text as InkText, TruncatedText, Tui,
 };
 pub use ui::render;

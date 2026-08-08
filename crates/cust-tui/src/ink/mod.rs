@@ -22,6 +22,7 @@
 //! The alternate-screen fullscreen viewport, markdown rendering, autocomplete,
 //! terminal image protocols (Kitty/iTerm2), and LaTeX-to-Unicode.
 
+pub mod autocomplete;
 pub mod component;
 pub mod components;
 pub mod differ;
@@ -34,8 +35,14 @@ pub mod terminal;
 pub mod tui;
 pub mod utils;
 
+pub use autocomplete::{
+    Autocomplete, AutocompleteItem, AutocompleteProvider, CombinedAutocompleteProvider, FilePathProvider,
+    SlashCommandProvider,
+};
 pub use component::{Component, Container, CURSOR_MARKER};
-pub use components::{BoxView, Editor, Loader, SelectItem, SelectList, Spacer, StatusLine, Text, TruncatedText};
+pub use components::{
+    BoxView, Editor, Loader, Markdown, SelectItem, SelectList, Spacer, StatusLine, Text, TruncatedText,
+};
 pub use differ::{CursorPos, Differ, Frame, FrameKind, FullRedrawReason};
 pub use fuzzy::{fuzzy_filter, fuzzy_filter_scored, fuzzy_match, FuzzyMatch, ScoredItem};
 pub use keys::{parse_key, parse_keys, Key, KeyCode, KeyEventType, Modifiers};

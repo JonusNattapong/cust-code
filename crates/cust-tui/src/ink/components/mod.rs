@@ -6,6 +6,7 @@
 mod boxed;
 mod editor;
 mod loader;
+mod markdown;
 mod select_list;
 mod spacer;
 mod status;
@@ -15,6 +16,7 @@ mod truncated_text;
 pub use boxed::{BorderStyle, BoxView};
 pub use editor::Editor;
 pub use loader::Loader;
+pub use markdown::Markdown;
 pub use select_list::{SelectItem, SelectList};
 pub use spacer::Spacer;
 pub use status::StatusLine;

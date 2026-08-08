@@ -338,37 +338,51 @@ takes no terminal I/O, so it is asserted on directly against `TestTerminal`.
 
 **Verified:** 142 tests; `cargo clippy` clean; whole workspace green.
 
-#### 37b — Editor (`ink::components::Editor`)
+#### 37b — Editor (`ink::components::Editor`) ✅
 
-The multi-line prompt input, and the piece everything else waits on. Port of pi-tui's
-`components/editor.ts` (~2.5k lines TS).
+The multi-line prompt input. Insert/delete, cursor movement (left/right/home/end/up/down),
+newline splitting, backspace merging lines, and paste detection that collapses a paste of
+more than 3 lines to a `[Pasted +N lines]` placeholder instead of flooding the buffer.
+Soft-wraps via `wrap_text_with_ansi` and emits `CURSOR_MARKER` at the caret.
 
-- Grapheme-aware cursor movement, selection, and word motions — a cursor that steps by
-  `char` lands inside emoji and Thai clusters.
-- Undo/redo (`undo-stack.ts`) and an emacs kill-ring (`kill-ring.ts`).
-- Soft-wrapped logical lines: one input line may occupy several terminal rows, and the
-  cursor has to map between the two.
-- Bracketed paste, and a paste snapshot so a large paste collapses to `[pasted 340 lines]`
-  rather than flooding the transcript.
-- Emits `CURSOR_MARKER` at the caret so the hardware cursor — and therefore the IME
-  candidate window — lands in the right cell.
+**Deferred from this pass:** undo/redo, the emacs kill-ring, true grapheme-aware cursor
+motion (current motion steps by `char`, which is wrong inside multi-codepoint clusters), and
+exact cursor placement within a wrapped row (the marker currently lands at the end of the
+last rendered row rather than the live column). Tracked as follow-up before this is wired to
+a live prompt.
 
-#### 37c — Overlays (`ink::tui`)
+**Verified:** 6 tests; workspace green.
+
+#### 37c — Overlays (`ink::overlay`) ✅
 
 Anchored, sized, clipped panels composited over the base content before the diff runs, from
 the overlay half of pi-tui's `tui.ts`. This is what permission prompts, the model picker, and
-the slash menu are drawn as. Percentage or absolute sizing, nine anchor points, margins, and
-a focus stack so the topmost capturing overlay owns the keyboard.
+the slash menu are drawn as. `OverlayOptions` (9-point anchor, absolute/percent width, max
+height, margin, offset), `OverlayStack` (show/hide/focus with a focus-order stack), wired into
+`Tui::show_overlay`/`hide_overlay` — `handle_input` now prefers the topmost focus-capturing
+overlay over the base container's focused child, and `render` composites overlays before the
+differ ever sees the frame, so a prompt costs no extra terminal round-trip.
 
-Overlays composite *into the frame*, so they cost no extra terminal round-trip and cannot
-tear against the content underneath.
+**Deferred from this pass:** `scrollback` overlays, `aboveMarker` anchoring, and selection-region
+bookkeeping — none on the path to a working permission prompt or menu.
 
-#### 37d — Markdown + autocomplete
+**Verified:** 20 tests (overlay module + `Tui` integration); workspace green.
 
-- `components/markdown.ts` — headings, lists, tables, and syntax-highlighted fenced code.
-  Assistant output is markdown; today it renders as raw text.
-- `autocomplete.ts` — the completion popup over `ink::fuzzy`, with providers for slash
-  commands, `@file` paths, and skills. Drawn as an overlay from 37c.
+#### 37d — Markdown + autocomplete ✅
+
+- `ink::components::Markdown` — line-oriented block parser (headings, paragraphs, fenced code,
+  bullet/numbered lists, blockquotes) plus inline `**bold**`/`*italic*`/`` `code` `` spans
+  rendered as ANSI. Assistant output is markdown; this is what turns it into styled rows.
+  **Deferred:** tables, nested lists, link-as-OSC-8-hyperlink, and syntax highlighting inside
+  fences (fences render dimmed and unwrapped, no per-language coloring).
+- `ink::autocomplete` — `Autocomplete` component (ranked, scrollable, keyboard-driven) over
+  `ink::fuzzy`, with an `AutocompleteProvider` trait and `CombinedAutocompleteProvider` that
+  dispatches by trigger character (`/` for `SlashCommandProvider`, `@` for `FilePathProvider`).
+  Meant to be shown via `Tui::show_overlay` from 37c. **Deferred:** the editor-side trigger
+  detection — deciding *when* to open the popup as the user types past `/` or `@` — is not
+  wired up; this module is the ranking/rendering half only.
+
+**Verified:** 15 markdown tests + 9 autocomplete tests; workspace green, clippy clean.
 
 #### 37e — Migrate the surface off ratatui
 
