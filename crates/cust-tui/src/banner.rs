@@ -171,32 +171,55 @@ pub fn logo_lines(size: LogoSize) -> &'static [&'static str] {
     }
 }
 
-/// A small block-pixel mascot, in the same visual style as Claude Code's
-/// welcome-screen character: a monochrome glyph built from `▄▀█` box-drawing
-/// blocks rather than line art. Shown centered in the wide two-column
-/// welcome layout; the narrow single-column fallback keeps the text logo
-/// instead, since 9 columns of mascot plus a readable status line don't both
-/// fit below [`TWO_COLUMN_MIN_WIDTH`].
-const MASCOT: &[&str] = &[
-    "  \u{2584}\u{2584}\u{2584}\u{2584}\u{2584}  ",
-    " \u{2588}\u{2580}\u{2580}\u{2580}\u{2580}\u{2580}\u{2588} ",
-    "\u{2588}  \u{25cf} \u{25cf}  \u{2588}",
-    "\u{2588}   \u{25bc}   \u{2588}",
-    "\u{2588} \u{2580}\u{2580}\u{2580}\u{2580}\u{2580} \u{2588}",
-    " \u{2588}\u{2584}\u{2584}\u{2584}\u{2584}\u{2584}\u{2588} ",
-    "  \u{2580}   \u{2580}  ",
+/// "Clawd" — the mascot from `clew-code`'s `LogoV2/Clawd.tsx` (`default`
+/// pose, horns on): purple body, red eyes, four rows of block-drawing
+/// glyphs. Shown centered in the wide two-column welcome layout; the narrow
+/// single-column fallback keeps the text logo instead, since 9 columns of
+/// mascot plus a readable status line don't both fit below
+/// [`TWO_COLUMN_MIN_WIDTH`].
+///
+/// Uncolored, for measuring/centering and for tests to search against after
+/// `strip_ansi`. Kept in sync with [`mascot_lines`] by construction — see its
+/// doc comment for how the two line up.
+const MASCOT_PLAIN: &[&str] = &[
+    "  \u{2597}   \u{2596}  ", // horns
+    " \u{2590} \u{2584}\u{2584}\u{2584} \u{258c} ", // face: eye padding + red eye
+    "\u{259d}\u{259c}     \u{259b}\u{2598}", // body: purple fill between the corner glyphs
+    "  \u{2598}\u{2598} \u{259d}\u{259d}  ", // legs
 ];
 
-/// The mascot, centered within `width` columns and colored to match the
-/// logo. Rows shorter than the mascot's own width (a caller passing a tiny
-/// width) are left unpadded rather than panicking.
+const CLAWD_BODY_RGB: (u8, u8, u8) = (135, 0, 255);
+const CLAWD_EYE_RGB: (u8, u8, u8) = (255, 0, 0);
+
+fn ansi_fg_rgb((r, g, b): (u8, u8, u8)) -> String {
+    format!("\u{1b}[38;2;{r};{g};{b}m")
+}
+
+fn ansi_bg_rgb((r, g, b): (u8, u8, u8)) -> String {
+    format!("\u{1b}[48;2;{r};{g};{b}m")
+}
+
+/// Clawd, centered within `width` columns and colored: purple body glyphs
+/// (foreground) around a solid purple fill (background) with a red eye
+/// glyph in the middle — mirroring how `Clawd.tsx` layers `color` (outline)
+/// against `backgroundColor` (body fill) rather than drawing one flat-color
+/// silhouette. Rows shorter than the mascot's own width (a caller passing a
+/// tiny width) are left unpadded rather than panicking.
 fn mascot_lines(width: usize) -> Vec<String> {
-    let mascot_width = MASCOT[0].chars().count();
+    let mascot_width = MASCOT_PLAIN[0].chars().count();
     let pad = " ".repeat(width.saturating_sub(mascot_width) / 2);
-    MASCOT
-        .iter()
-        .map(|row| format!("{ANSI_CYAN}{ANSI_BOLD}{pad}{row}{ANSI_RESET}"))
-        .collect()
+    let fg_body = ansi_fg_rgb(CLAWD_BODY_RGB);
+    let bg_body = ansi_bg_rgb(CLAWD_BODY_RGB);
+    let fg_eye = ansi_fg_rgb(CLAWD_EYE_RGB);
+
+    let horns = format!("{fg_body}  \u{2597}   \u{2596}  {ANSI_RESET}");
+    let face = format!(
+        "{fg_body} \u{2590}{ANSI_RESET}{bg_body} {ANSI_RESET}{fg_eye}{bg_body}\u{2584}\u{2584}\u{2584}{ANSI_RESET}{bg_body} {ANSI_RESET}{fg_body}\u{258c} {ANSI_RESET}"
+    );
+    let body = format!("{fg_body}\u{259d}\u{259c}{ANSI_RESET}{bg_body}     {ANSI_RESET}{fg_body}\u{259b}\u{2598}{ANSI_RESET}");
+    let legs = format!("{fg_body}  \u{2598}\u{2598} \u{259d}\u{259d}  {ANSI_RESET}");
+
+    [horns, face, body, legs].into_iter().map(|row| format!("{pad}{row}")).collect()
 }
 
 /// `v0.1.0 · openai/gpt-4o · sandbox: off`
@@ -508,7 +531,7 @@ mod tests {
         let rows: Vec<String> = render(&info(), 100).iter().map(|l| strip_ansi(l)).collect();
         let text = rows.join("\n");
         assert!(text.contains("Tips for getting started"));
-        assert!(text.contains(MASCOT[2]), "left column mascot missing:\n{text}");
+        assert!(text.contains(MASCOT_PLAIN[1]), "left column mascot missing:\n{text}");
 
         // Proof the columns sit side by side rather than stacked: the "Tips"
         // heading (top of the right column) shares vertical space with the
@@ -517,7 +540,7 @@ mod tests {
         let tips_row = rows.iter().position(|l| l.contains("Tips for getting started")).expect("tips heading row");
         let last_mascot_row = rows
             .iter()
-            .position(|l| l.contains(MASCOT[MASCOT.len() - 1]))
+            .position(|l| l.contains(MASCOT_PLAIN[MASCOT_PLAIN.len() - 1]))
             .expect("last mascot row");
         assert!(
             tips_row < last_mascot_row,
@@ -533,7 +556,7 @@ mod tests {
     fn wide_panel_centers_the_mascot_in_the_left_column() {
         let rows: Vec<String> = render(&info(), 100).iter().map(|l| strip_ansi(l)).collect();
         let text = rows.join("\n");
-        for row in MASCOT {
+        for row in MASCOT_PLAIN {
             assert!(text.contains(row), "mascot row missing: {row:?}\n{text}");
         }
     }
@@ -542,7 +565,7 @@ mod tests {
     fn narrow_panel_shows_the_text_logo_not_the_mascot() {
         let rows: Vec<String> = render(&info(), 40).iter().map(|l| strip_ansi(l)).collect();
         let text = rows.join("\n");
-        assert!(!text.contains(MASCOT[2]), "mascot should not appear below the two-column threshold:\n{text}");
+        assert!(!text.contains(MASCOT_PLAIN[1]), "mascot should not appear below the two-column threshold:\n{text}");
     }
 
     #[test]

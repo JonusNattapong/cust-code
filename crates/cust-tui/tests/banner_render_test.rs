@@ -31,10 +31,10 @@ fn wide_terminal_draws_the_mascot_and_status() {
     let text = rows.join("\n");
 
     assert!(text.contains("Welcome"), "missing panel title:\n{text}");
-    // The pixel-block mascot the wide two-column layout shows instead of
-    // the text logo (narrow terminals keep the text logo — see
+    // Clawd's face row — the wide two-column layout shows the mascot instead
+    // of the text logo (narrow terminals keep the text logo — see
     // `narrow_terminal_degrades_to_a_smaller_logo`).
-    assert!(text.contains("\u{2588}   \u{25bc}   \u{2588}"), "missing mascot:\n{text}");
+    assert!(text.contains("\u{2590} \u{2584}\u{2584}\u{2584} \u{258c}"), "missing mascot:\n{text}");
     assert!(text.contains("v1.2.3"), "missing version:\n{text}");
     assert!(text.contains("openai/gpt-4o"), "missing model:\n{text}");
     assert!(text.contains("sandbox: read-only"), "missing sandbox:\n{text}");
