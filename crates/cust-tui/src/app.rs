@@ -197,6 +197,41 @@ impl TuiState {
         self.logs.push(format!("[/{name}] {message}"));
     }
 
+    /// The sandbox profile `!` commands should run under, matching whatever
+    /// the agent's own tools are restricted to.
+    pub fn sandbox_profile(&self) -> cust_exec::SandboxProfile {
+        match self.banner.sandbox {
+            crate::banner::SandboxStatus::Off => cust_exec::SandboxProfile::Off,
+            crate::banner::SandboxStatus::Workspace => cust_exec::SandboxProfile::Workspace,
+            crate::banner::SandboxStatus::ReadOnly => cust_exec::SandboxProfile::ReadOnly,
+            crate::banner::SandboxStatus::Strict => cust_exec::SandboxProfile::Strict,
+        }
+    }
+
+    pub fn log_shell_command(&mut self, cmd: &str) {
+        self.logs.push(format!("[!] {cmd}"));
+    }
+
+    pub fn log_shell_result(&mut self, result: &cust_exec::runner::ExecutionResult) {
+        if !result.stdout.trim_end().is_empty() {
+            for line in result.stdout.trim_end().lines() {
+                self.logs.push(line.to_string());
+            }
+        }
+        if !result.stderr.trim_end().is_empty() {
+            for line in result.stderr.trim_end().lines() {
+                self.logs.push(format!("stderr: {line}"));
+            }
+        }
+        if result.exit_code != 0 {
+            self.logs.push(format!("[!] exited {}", result.exit_code));
+        }
+    }
+
+    pub fn log_shell_error(&mut self, err: &anyhow::Error) {
+        self.logs.push(format!("[!] failed: {err}"));
+    }
+
     /// Advance to the next permission mode (Shift+Tab) and log the change.
     pub fn cycle_permission_mode(&mut self) -> PermissionMode {
         let mode = self.permission_mode.cycle();
@@ -271,5 +306,74 @@ impl TuiState {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sandbox_profile_maps_every_status_one_to_one() {
+        let mut state = TuiState::default();
+        for (status, expected) in [
+            (crate::banner::SandboxStatus::Off, cust_exec::SandboxProfile::Off),
+            (
+                crate::banner::SandboxStatus::Workspace,
+                cust_exec::SandboxProfile::Workspace,
+            ),
+            (
+                crate::banner::SandboxStatus::ReadOnly,
+                cust_exec::SandboxProfile::ReadOnly,
+            ),
+            (crate::banner::SandboxStatus::Strict, cust_exec::SandboxProfile::Strict),
+        ] {
+            state.banner.sandbox = status;
+            assert_eq!(state.sandbox_profile(), expected);
+        }
+    }
+
+    #[test]
+    fn log_shell_command_records_the_invocation() {
+        let mut state = TuiState::default();
+        state.log_shell_command("ls -la");
+        assert_eq!(state.logs, vec!["[!] ls -la".to_string()]);
+    }
+
+    #[test]
+    fn log_shell_result_splits_stdout_and_stderr_and_flags_nonzero_exit() {
+        let mut state = TuiState::default();
+        state.log_shell_result(&cust_exec::runner::ExecutionResult {
+            exit_code: 1,
+            stdout: "line1\nline2\n".to_string(),
+            stderr: "oops\n".to_string(),
+        });
+        assert_eq!(
+            state.logs,
+            vec![
+                "line1".to_string(),
+                "line2".to_string(),
+                "stderr: oops".to_string(),
+                "[!] exited 1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn log_shell_result_on_success_is_silent_about_exit_code() {
+        let mut state = TuiState::default();
+        state.log_shell_result(&cust_exec::runner::ExecutionResult {
+            exit_code: 0,
+            stdout: "ok\n".to_string(),
+            stderr: String::new(),
+        });
+        assert_eq!(state.logs, vec!["ok".to_string()]);
+    }
+
+    #[test]
+    fn log_shell_error_records_the_failure() {
+        let mut state = TuiState::default();
+        state.log_shell_error(&anyhow::anyhow!("boom"));
+        assert_eq!(state.logs, vec!["[!] failed: boom".to_string()]);
     }
 }
